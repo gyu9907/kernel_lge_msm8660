@@ -2239,6 +2239,12 @@ dput_out:
 	return retval;
 }
 
+static void free_mnt_ns(struct mnt_namespace *ns)
+{
+	proc_free_inum(ns->proc_inum);
+	kfree(ns);
+}
+
 /*
  * Assign a sequence number so we can detect when we attempt to bind
  * mount a reference to an older mount namespace into the current
@@ -2251,10 +2257,16 @@ static atomic64_t mnt_ns_seq = ATOMIC64_INIT(1);
 static struct mnt_namespace *alloc_mnt_ns(void)
 {
 	struct mnt_namespace *new_ns;
+	int ret;
 
 	new_ns = kmalloc(sizeof(struct mnt_namespace), GFP_KERNEL);
 	if (!new_ns)
 		return ERR_PTR(-ENOMEM);
+	ret = proc_alloc_inum(&new_ns->proc_inum);
+	if (ret) {
+		kfree(new_ns);
+		return ERR_PTR(ret);
+	}
 	new_ns->seq = atomic64_add_return(1, &mnt_ns_seq);
 	atomic_set(&new_ns->count, 1);
 	new_ns->root = NULL;
@@ -2303,7 +2315,7 @@ static struct mnt_namespace *dup_mnt_ns(struct mnt_namespace *mnt_ns,
 	new = copy_tree(old, old->mnt.mnt_root, CL_COPY_ALL | CL_EXPIRE);
 	if (!new) {
 		up_write(&namespace_sem);
-		kfree(new_ns);
+		free_mnt_ns(new_ns);
 		return ERR_PTR(-ENOMEM);
 	}
 	new_ns->root = new;
@@ -2658,7 +2670,7 @@ void put_mnt_ns(struct mnt_namespace *ns)
 	br_write_unlock(vfsmount_lock);
 	up_write(&namespace_sem);
 	release_mounts(&umount_list);
-	kfree(ns);
+	free_mnt_ns(ns);
 }
 
 struct vfsmount *kern_mount_data(struct file_system_type *type, void *data)
@@ -2743,10 +2755,17 @@ static int mntns_install(struct nsproxy *nsproxy, void *ns)
 	return 0;
 }
 
+static unsigned int mntns_inum(void *ns)
+{
+	struct mnt_namespace *mnt_ns = ns;
+	return mnt_ns->proc_inum;
+}
+
 const struct proc_ns_operations mntns_operations = {
 	.name		= "mnt",
 	.type		= CLONE_NEWNS,
 	.get		= mntns_get,
 	.put		= mntns_put,
 	.install	= mntns_install,
+	.inum		= mntns_inum,
 };
