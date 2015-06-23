@@ -142,6 +142,21 @@ int blk_rq_map_sg(struct request_queue *q, struct request *rq,
 			if (!BIOVEC_SEG_BOUNDARY(q, bvprv, bvec))
 				goto new_segment;
 
+            /*
+             * CASE 1019287 / CR 385896
+             * Workaround (temporary patch)
+             * If PHYS_MERGEABLE and SEG_BOUNDARY, bv_page should be contiguous.
+             * we observe bv_page are not contiguous.
+             * So, if bv_page are not same nor nested, make a new segment.
+             */
+            if (!((unsigned long)(bvprv->bv_page) == (unsigned long)(bvec->bv_page)
+                || (unsigned long)(bvprv->bv_page + 1) == (unsigned long)(bvec->bv_page))) {
+                //       printk("debug : bvprv->bv_page %lx, %lx\n", (unsigned long)(bvprv->bv_page), bvec_to_phys(bvprv));
+                //       printk("debug : bvec->bv_page %lx, %lx\n", (unsigned long)(bvec->bv_page), bvec_to_phys(bvec));
+                //       BUG();
+                goto new_segment;
+            }
+
 			sg->length += nbytes;
 		} else {
 new_segment:

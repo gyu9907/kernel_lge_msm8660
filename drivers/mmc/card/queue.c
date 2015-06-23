@@ -85,7 +85,9 @@ static int mmc_queue_thread(void *d)
 				break;
 			}
 
+#if !defined (CONFIG_MACH_LGE_325_BOARD_VZW) /* mbhyun.kim 2013.02.26: Fix Disk Encryption fail problem  */
 			mmc_start_bkops(mq->card);
+#endif
 			up(&mq->thread_sem);
 			schedule();
 			down(&mq->thread_sem);

@@ -151,7 +151,7 @@ static int rmnet_usb_resume(struct usb_interface *iface)
 	retval = usbnet_resume(iface);
 	if (!retval) {
 		if (oldstate & PM_EVENT_SUSPEND)
-			retval = rmnet_usb_ctrl_start(dev);
+			retval = rmnet_usb_ctrl_start_rx(dev);
 	}
 fail:
 	return retval;
@@ -557,6 +557,8 @@ static int rmnet_usb_probe(struct usb_interface *iface,
 		dev_dbg(&iface->dev, "mode debugfs file is not available\n");
 
 	udev = unet->udev;
+
+	usb_enable_autosuspend(udev);
 
 	/* allow modem to wake up suspended system */
 	device_set_wakeup_enable(&udev->dev, 1);

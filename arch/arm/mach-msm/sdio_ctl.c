@@ -25,7 +25,9 @@
 #include <linux/mutex.h>
 #include <linux/uaccess.h>
 #include <linux/workqueue.h>
+#if 1 //                                                                                                   
 #include <linux/poll.h>
+#endif
 #include <asm/ioctls.h>
 #include <linux/platform_device.h>
 #include <mach/msm_smd.h>
@@ -207,6 +209,7 @@ static long sdio_ctl_ioctl(struct file *file, unsigned int cmd,
 	return ret;
 }
 
+#if 1 //                                                                                                   
 static unsigned int sdio_ctl_poll(struct file *file, poll_table *wait)
 {
 	struct sdio_ctl_dev *sdio_ctl_devp;
@@ -234,6 +237,7 @@ static unsigned int sdio_ctl_poll(struct file *file, poll_table *wait)
 
 	return mask;
 }
+#endif
 
 ssize_t sdio_ctl_read(struct file *file,
 		      char __user *buf,
@@ -440,6 +444,7 @@ int sdio_ctl_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
+#if 1 // Qualcomm original
 static const struct file_operations sdio_ctl_fops = {
 	.owner = THIS_MODULE,
 	.open = sdio_ctl_open,
@@ -449,6 +454,16 @@ static const struct file_operations sdio_ctl_fops = {
 	.poll = sdio_ctl_poll,
 	.unlocked_ioctl = sdio_ctl_ioctl,
 };
+#else //                                                                                                   
+static const struct file_operations sdio_ctl_fops = {
+	.owner = THIS_MODULE,
+	.open = sdio_ctl_open,
+	.release = sdio_ctl_release,
+	.read = sdio_ctl_read,
+	.write = sdio_ctl_write,
+	.unlocked_ioctl = sdio_ctl_ioctl,
+};
+#endif
 
 static int sdio_ctl_probe(struct platform_device *pdev)
 {

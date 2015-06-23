@@ -794,9 +794,11 @@ int smd_pkt_open(struct inode *inode, struct file *file)
 			smd_pkt_devp->pil = pil_get(peripheral);
 			if (IS_ERR(smd_pkt_devp->pil)) {
 				r = PTR_ERR(smd_pkt_devp->pil);
+#if 0 /*                                                                */
 				pr_err("%s failed on smd_pkt_dev id:%d -"
 				       " pil_get failed for %s\n", __func__,
 					smd_pkt_devp->i, peripheral);
+#endif
 				goto release_pd;
 			}
 

@@ -157,7 +157,12 @@ void mmc_host_clk_hold(struct mmc_host *host)
 	unsigned long flags;
 
 	/* cancel any clock gating work scheduled by mmc_host_clk_release() */
+#if 0 /*                                                        */
 	cancel_delayed_work_sync(&host->clk_gate_work);
+#else /* to fix power on/off TZ crash */
+	if (!(host->caps2 & MMC_CAP2_SDIO_AL))
+		cancel_delayed_work_sync(&host->clk_gate_work);
+#endif
 	mutex_lock(&host->clk_gate_mutex);
 	spin_lock_irqsave(&host->clk_lock, flags);
 	if (host->clk_gated) {
@@ -177,6 +182,14 @@ void mmc_host_clk_hold(struct mmc_host *host)
  */
 static bool mmc_host_may_gate_card(struct mmc_card *card)
 {
+#if 1 /*                                                                             */
+	if (card) {
+		if (card->host)
+			if (card->host->caps2 & MMC_CAP2_SDIO_AL)
+				return false;
+	}
+#endif
+
 	/* If there is no card we may gate it */
 	if (!card)
 		return true;

@@ -17,6 +17,12 @@
 #ifndef __LINUX_MSM_AUDIO_H
 #define __LINUX_MSM_AUDIO_H
 
+#if defined (CONFIG_MACH_LGE_120_BOARD_KT)
+/* Copyright 2011 NXP Software, begin */
+#include <linux/time.h>
+#define LVVE
+/* Copyright 2011 NXP Software, end */
+#endif
 #include <linux/types.h>
 #include <linux/ioctl.h>
 
@@ -96,6 +102,12 @@
 
 #define AUDIO_REGISTER_ION _IOW(AUDIO_IOCTL_MAGIC, 97, unsigned)
 #define AUDIO_DEREGISTER_ION _IOW(AUDIO_IOCTL_MAGIC, 98, unsigned)
+#ifdef LVVE
+/* Copyright 2011 NXP Software, begin */
+//#define AUDIO_PCM_HTIMESTAMP _IOR(AUDIO_IOCTL_MAGIC, 97, struct msm_audio_htimestamp)
+#define AUDIO_PCM_HTIMESTAMP _IOR(AUDIO_IOCTL_MAGIC, 99, struct msm_audio_htimestamp)
+/* Copyright 2011 NXP Software, end */
+#endif
 
 #define	AUDIO_MAX_COMMON_IOCTL_NUM	100
 
@@ -222,6 +234,28 @@ struct msm_snd_device_config {
 
 #define SND_SET_DEVICE _IOW(SND_IOCTL_MAGIC, 2, struct msm_device_config *)
 
+enum cad_device_path_type {
+	CAD_DEVICE_PATH_RX,	/*For Decoding session*/
+	CAD_DEVICE_PATH_TX,	/* For Encoding session*/
+	CAD_DEVICE_PATH_RX_TX, /* For Voice call */
+	CAD_DEVICE_PATH_LB,	/* For loopback (FM Analog)*/
+	CAD_DEVICE_PATH_MAX
+};
+
+struct cad_devices_type {
+	uint32_t rx_device;
+	uint32_t tx_device;
+	enum cad_device_path_type pathtype;
+};
+
+struct msm_cad_device_config {
+	struct cad_devices_type device;
+	uint32_t ear_mute;
+	uint32_t mic_mute;
+};
+
+#define CAD_SET_DEVICE _IOW(SND_IOCTL_MAGIC, 2, struct msm_cad_device_config *)
+
 #define SND_METHOD_VOICE 0
 
 struct msm_snd_volume_config {
@@ -231,6 +265,14 @@ struct msm_snd_volume_config {
 };
 
 #define SND_SET_VOLUME _IOW(SND_IOCTL_MAGIC, 3, struct msm_snd_volume_config *)
+
+struct msm_cad_volume_config {
+	struct cad_devices_type device;
+	uint32_t method;
+	uint32_t volume;
+};
+
+#define CAD_SET_VOLUME _IOW(SND_IOCTL_MAGIC, 3, struct msm_cad_volume_config *)
 
 /* Returns the number of SND endpoints supported. */
 
@@ -253,6 +295,24 @@ struct msm_snd_endpoint {
 
 #define SND_AVC_CTL _IOW(SND_IOCTL_MAGIC, 6, unsigned *)
 #define SND_AGC_CTL _IOW(SND_IOCTL_MAGIC, 7, unsigned *)
+
+/*return the number of CAD endpoints supported. */
+
+#define CAD_GET_NUM_ENDPOINTS _IOR(SND_IOCTL_MAGIC, 4, unsigned *)
+
+struct msm_cad_endpoint {
+	int id; /* input and output */
+	char name[64]; /* output only */
+};
+
+/* Takes an index between 0 and one less than the number returned by
+ * SND_GET_NUM_ENDPOINTS, and returns the CAD index and name of a
+ * CAD endpoint.  On input, the .id field contains the number of the
+ * endpoint, and on exit it contains the SND index, while .name contains
+ * the description of the endpoint.
+ */
+
+#define CAD_GET_ENDPOINT _IOWR(SND_IOCTL_MAGIC, 5, struct msm_cad_endpoint *)
 
 struct msm_audio_pcm_config {
 	uint32_t pcm_feedback;	/* 0 - disable > 0 - enable */
@@ -363,5 +423,13 @@ struct msm_acdb_cmd_device {
 	uint32_t     *phys_buf;           /* Physical Address of data */
 };
 
+#ifdef LVVE
+/* Copyright 2011 NXP Software, begin */
+struct msm_audio_htimestamp{
+	unsigned long   avail;
+	struct timespec time;
+};
+/* Copyright 2011 NXP Software, end */
+#endif
 
 #endif

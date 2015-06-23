@@ -113,6 +113,12 @@ EXPORT_SYMBOL(system_state);
 #define MAX_INIT_ARGS CONFIG_INIT_ENV_ARG_LIMIT
 #define MAX_INIT_ENVS CONFIG_INIT_ENV_ARG_LIMIT
 
+#if defined(CONFIG_MACH_LGE_I_BOARD)
+#if defined(CONFIG_LGE_PM)
+static void smpl_count(void);
+#endif
+#endif
+
 extern void time_init(void);
 /* Default late time init is NULL. archs can override this later. */
 void (*__initdata late_time_init)(void);
@@ -139,6 +145,11 @@ static char *ramdisk_execute_command;
  */
 unsigned int reset_devices;
 EXPORT_SYMBOL(reset_devices);
+
+#if defined(CONFIG_MACH_LGE_I_BOARD)
+unsigned int smpl_on;
+EXPORT_SYMBOL(smpl_on);
+#endif
 
 static int __init set_reset_devices(char *str)
 {
@@ -382,9 +393,52 @@ static noinline void __init_refok rest_init(void)
 	 */
 	init_idle_bootup_task(current);
 	schedule_preempt_disabled();
+#if defined(CONFIG_MACH_LGE_I_BOARD)
+#if defined(CONFIG_LGE_PM)
+	smpl_count();
+#endif
+#endif
 	/* Call into cpu_idle with preempt disabled */
 	cpu_idle();
 }
+
+#if defined(CONFIG_MACH_LGE_I_BOARD)
+#if defined(CONFIG_LGE_PM)
+#define PWR_ON_EVENT_KEYPAD         0x1
+#define PWR_ON_EVENT_RTC            0x2
+#define PWR_ON_EVENT_CABLE          0x4
+#define PWR_ON_EVENT_SMPL           0x8
+#define PWR_ON_EVENT_WDOG           0x10
+#define PWR_ON_EVENT_USB_CHG        0x20
+#define PWR_ON_EVENT_WALL_CHG       0x40
+#define PWR_ON_EVENT_HARD_RESET     0x100
+
+extern struct file *fget(unsigned int fd);
+extern void fput(struct file *);
+extern uint16_t power_on_status_info_get(void);
+static void smpl_count(void)
+{
+#if 1 //joon0.lee/20111124/BLOCK UNTIL fix write_file
+//	char* file_name = "/smpl_boot";
+	uint16_t boot_cause = 0;
+
+	boot_cause = power_on_status_info_get();
+	printk("[BOOT_CAUSE] %d \n", boot_cause);
+
+	if(boot_cause==PWR_ON_EVENT_SMPL)
+	{
+		printk("[SMPL_CNT] ===> is smpl boot\n");
+		smpl_on = 1;
+	}
+	else
+	{
+		smpl_on = 0;
+	}
+#endif
+}
+#endif
+#endif
+
 
 /* Check for early params. */
 static int __init do_early_param(char *param, char *val)

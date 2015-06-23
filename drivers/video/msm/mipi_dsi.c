@@ -77,46 +77,21 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	else
 		down(&mfd->dma->mutex);
 
-#if defined(CONFIG_FB_MSM_MIPI_DSI_LGIT)
-	ret = panel_next_off(pdev);
-	if (ret < 0) {
-		pr_err("%s: failed to turn off the panel\n", __func__);
-		if (mdp_rev >= MDP_REV_41)
-			mutex_unlock(&mfd->dma->ov_mutex);
-		else
-			up(&mfd->dma->mutex);
-		return ret;
-	}
-#endif
-
 	mdp4_overlay_dsi_state_set(ST_DSI_SUSPEND);
 
-	/*
-	 * Description: dsi clock is need to perform shutdown.
-	 * mdp4_dsi_cmd_dma_busy_wait() will enable dsi clock if disabled.
-	 * also, wait until dma (overlay and dmap) finish.
+	/* make sure dsi clk is on so that
+	 * dcs commands can be sent
 	 */
-	if (mfd->panel_info.type == MIPI_CMD_PANEL) {
-		if (mdp_rev >= MDP_REV_41) {
-			mdp4_dsi_cmd_del_timer();
-			mdp4_dsi_cmd_dma_busy_wait(mfd);
-			mdp4_dsi_blt_dmap_busy_wait(mfd);
-			mipi_dsi_mdp_busy_wait(mfd);
-		} else {
-			mdp3_dsi_cmd_dma_busy_wait(mfd);
-		}
-	} else {
-		/* video mode, wait until fifo cleaned */
-		mipi_dsi_controller_cfg(0);
-	}
+	mipi_dsi_clk_cfg(1);
+
+	/* make sure dsi_cmd_mdp is idle */
+	mipi_dsi_cmd_mdp_busy();
 
 	/*
 	 * Desctiption: change to DSI_CMD_MODE since it needed to
 	 * tx DCS dsiplay off comamnd to panel
 	 */
-#if !defined(CONFIG_FB_MSM_MIPI_DSI_LGIT)
 	mipi_dsi_op_mode_config(DSI_CMD_MODE);
-#endif
 
 	if (mfd->panel_info.type == MIPI_CMD_PANEL) {
 		if (pinfo->lcd.vsync_enable) {
@@ -128,9 +103,7 @@ static int mipi_dsi_off(struct platform_device *pdev)
 		}
 	}
 
-#if !defined(CONFIG_FB_MSM_MIPI_DSI_LGIT)
 	ret = panel_next_off(pdev);
-#endif
 
 #ifdef CONFIG_MSM_BUS_SCALING
 	mdp_bus_scale_update_request(0);
@@ -160,6 +133,15 @@ static int mipi_dsi_off(struct platform_device *pdev)
 
 	return ret;
 }
+
+struct mdp4_overlay_perf {
+	u32 mdp_clk_rate;
+	u32 use_ov0_blt;
+	u32 use_ov1_blt;
+	u32 mdp_bw;
+};
+
+extern struct mdp4_overlay_perf perf_current;
 
 static int mipi_dsi_on(struct platform_device *pdev)
 {
@@ -287,9 +269,7 @@ static int mipi_dsi_on(struct platform_device *pdev)
 
 	ret = panel_next_on(pdev);
 
-#if !defined(CONFIG_FB_MSM_MIPI_DSI_LGIT)
 	mipi_dsi_op_mode_config(mipi->mode);
-#endif
 
 	if (mfd->panel_info.type == MIPI_CMD_PANEL) {
 		if (pinfo->lcd.vsync_enable) {
@@ -340,6 +320,7 @@ static int mipi_dsi_on(struct platform_device *pdev)
 
 #ifdef CONFIG_MSM_BUS_SCALING
 	mdp_bus_scale_update_request(2);
+    perf_current.mdp_bw = OVERLAY_PERF_LEVEL4;
 #endif
 
 	mdp4_overlay_dsi_state_set(ST_DSI_RESUME);

@@ -25,6 +25,18 @@
  */
 #define TIMEOUT	(20 * HZ)
 
+#if 1
+/*
+                                                                                   
+                                              
+                                     
+                                      
+                                                                         
+ */
+extern void enable_msm_watchdog(void);
+extern void disable_msm_watchdog(void);
+#endif
+
 static int try_to_freeze_tasks(bool user_only)
 {
 	struct task_struct *g, *p;
@@ -121,7 +133,13 @@ static int try_to_freeze_tasks(bool user_only)
 				if (p != current && !freezer_should_skip(p)
 				    && freezing(p) && !frozen(p) &&
 				    elapsed_csecs > 100)
+#if 1 /*                                        */
+					disable_msm_watchdog();
+#endif
 					sched_show_task(p);
+#if 1 /*                                        */
+					enable_msm_watchdog();
+#endif
 			} while_each_thread(g, p);
 			read_unlock(&tasklist_lock);
 		}

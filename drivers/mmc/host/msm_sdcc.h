@@ -213,7 +213,7 @@
 
 #define NR_SG		128
 
-#define MSM_MMC_IDLE_TIMEOUT	5000 /* msecs */
+#define MSM_MMC_DEFAULT_IDLE_TIMEOUT	5000 /* msecs */
 #define MSM_MMC_CLK_GATE_DELAY	200 /* msecs */
 
 /* Set the request timeout to 10secs */
@@ -400,6 +400,7 @@ struct msmsdcc_host {
 	bool io_pad_pwr_switch;
 	bool tuning_in_progress;
 	bool tuning_needed;
+	bool en_auto_cmd19;
 	bool sdio_gpio_lpm;
 	bool irq_wake_enabled;
 	struct pm_qos_request pm_qos_req_dma;
@@ -410,9 +411,12 @@ struct msmsdcc_host {
 	bool sdio_wakeupirq_disabled;
 	struct mutex clk_mutex;
 	bool pending_resume;
+	unsigned int idle_tout_ms;			/* Timeout in msecs */
 	struct msmsdcc_msm_bus_vote msm_bus_vote;
 	struct device_attribute	max_bus_bw;
 	struct device_attribute	polling;
+	struct device_attribute idle_timeout;
+	struct device_attribute auto_cmd19_attr;
 };
 
 #define MSMSDCC_VERSION_MASK	0xFFFF
@@ -423,6 +427,9 @@ struct msmsdcc_host {
 #define MSMSDCC_REG_WR_ACTIVE	(1 << 4)
 #define MSMSDCC_SW_RST		(1 << 5)
 #define MSMSDCC_SW_RST_CFG	(1 << 6)
+#define MSMSDCC_WAIT_FOR_TX_RX	(1 << 7)
+#define MSMSDCC_IO_PAD_PWR_SWITCH	(1 << 8)
+#define MSMSDCC_AUTO_CMD19	(1 << 9)
 
 #define set_hw_caps(h, val)		((h)->hw_caps |= val)
 #define is_sps_mode(h)			((h)->hw_caps & MSMSDCC_SPS_BAM_SUP)
@@ -432,6 +439,9 @@ struct msmsdcc_host {
 #define is_wait_for_reg_write(h)	((h)->hw_caps & MSMSDCC_REG_WR_ACTIVE)
 #define is_sw_hard_reset(h)		((h)->hw_caps & MSMSDCC_SW_RST)
 #define is_sw_reset_save_config(h)	((h)->hw_caps & MSMSDCC_SW_RST_CFG)
+#define is_wait_for_tx_rx_active(h)	((h)->hw_caps & MSMSDCC_WAIT_FOR_TX_RX)
+#define is_io_pad_pwr_switch(h)	((h)->hw_caps & MSMSDCC_IO_PAD_PWR_SWITCH)
+#define is_auto_cmd19(h)		((h)->hw_caps & MSMSDCC_AUTO_CMD19)
 
 /* Set controller capabilities based on version */
 static inline void set_default_hw_caps(struct msmsdcc_host *host)
@@ -450,7 +460,9 @@ static inline void set_default_hw_caps(struct msmsdcc_host *host)
 	version &= MSMSDCC_VERSION_MASK;
 	if (version) /* SDCC v4 and greater */
 		host->hw_caps |= MSMSDCC_AUTO_PROG_DONE |
-			MSMSDCC_SOFT_RESET | MSMSDCC_REG_WR_ACTIVE;
+			MSMSDCC_SOFT_RESET | MSMSDCC_REG_WR_ACTIVE
+			| MSMSDCC_WAIT_FOR_TX_RX | MSMSDCC_IO_PAD_PWR_SWITCH
+			| MSMSDCC_AUTO_CMD19;
 
 	if (version >= 0x2D) /* SDCC v4 2.1.0 and greater */
 		host->hw_caps |= MSMSDCC_SW_RST | MSMSDCC_SW_RST_CFG;

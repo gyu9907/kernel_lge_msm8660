@@ -41,8 +41,6 @@
 #include <linux/mfd/pm8xxx/misc.h>
 #include <linux/power_supply.h>
 
-#include <asm/mach-types.h>
-
 #include <mach/clk.h>
 #include <mach/msm_xo.h>
 #include <mach/msm_bus.h>
@@ -745,6 +743,14 @@ static int msm_otg_suspend(struct msm_otg *motg)
 		test_bit(A_BUS_SUSPEND, &motg->inputs) &&
 		motg->caps & ALLOW_LPM_ON_DEV_SUSPEND;
 	dcp = motg->chg_type == USB_DCP_CHARGER;
+
+	/* charging detection in progress due to cable plug-in */
+	if (test_bit(B_SESS_VLD, &motg->inputs) && !device_bus_suspend &&
+		!dcp) {
+		enable_irq(motg->irq);
+		return -EBUSY;
+	}
+
 	/*
 	 * Chipidea 45-nm PHY suspend sequence:
 	 *
@@ -1270,13 +1276,11 @@ static int msm_otg_set_host(struct usb_otg *otg, struct usb_bus *host)
 		return -ENODEV;
 	}
 
-	if (!machine_is_apq8064_mako()) {
-		if (!motg->pdata->vbus_power && host) {
-			vbus_otg = devm_regulator_get(motg->phy.dev, "vbus_otg");
-			if (IS_ERR(vbus_otg)) {
-				pr_err("Unable to get vbus_otg\n");
-				return -ENODEV;
-			}
+	if (!motg->pdata->vbus_power && host) {
+		vbus_otg = devm_regulator_get(motg->phy.dev, "vbus_otg");
+		if (IS_ERR(vbus_otg)) {
+			pr_err("Unable to get vbus_otg\n");
+			return -ENODEV;
 		}
 	}
 
@@ -2028,6 +2032,9 @@ static void msm_otg_init_sm(struct msm_otg *motg)
 	}
 }
 
+#ifdef CONFIG_LGE_TOUCHSCREEN_SYNAPTICS_RMI4_I2C   
+extern void trigger_baseline_state_machine(int plug_in);
+#endif
 static void msm_otg_sm_work(struct work_struct *w)
 {
 	struct msm_otg *motg = container_of(w, struct msm_otg, sm_work);
@@ -2068,6 +2075,9 @@ static void msm_otg_sm_work(struct work_struct *w)
 			case USB_CHG_STATE_DETECTED:
 				switch (motg->chg_type) {
 				case USB_DCP_CHARGER:
+#ifdef CONFIG_LGE_TOUCHSCREEN_SYNAPTICS_RMI4_I2C
+                    trigger_baseline_state_machine(USB_DCP_CHARGER);
+#endif
 					/* Enable VDP_SRC */
 					ulpi_write(otg->phy, 0x2, 0x85);
 					/* fall through */
@@ -2091,6 +2101,9 @@ static void msm_otg_sm_work(struct work_struct *w)
 					msm_otg_start_peripheral(otg, 1);
 					otg->phy->state =
 						OTG_STATE_B_PERIPHERAL;
+#ifdef CONFIG_LGE_TOUCHSCREEN_SYNAPTICS_RMI4_I2C
+                    trigger_baseline_state_machine(USB_CDP_CHARGER);
+#endif
 					break;
 				case USB_ACA_C_CHARGER:
 					msm_otg_notify_charger(motg,
@@ -2100,6 +2113,9 @@ static void msm_otg_sm_work(struct work_struct *w)
 						OTG_STATE_B_PERIPHERAL;
 					break;
 				case USB_SDP_CHARGER:
+#ifdef CONFIG_LGE_TOUCHSCREEN_SYNAPTICS_RMI4_I2C
+                    trigger_baseline_state_machine(USB_SDP_CHARGER);
+#endif
 					msm_otg_start_peripheral(otg, 1);
 					otg->phy->state =
 						OTG_STATE_B_PERIPHERAL;
@@ -2126,6 +2142,9 @@ static void msm_otg_sm_work(struct work_struct *w)
 			cancel_delayed_work_sync(&motg->chg_work);
 			motg->chg_state = USB_CHG_STATE_UNDEFINED;
 			motg->chg_type = USB_INVALID_CHARGER;
+#ifdef CONFIG_LGE_TOUCHSCREEN_SYNAPTICS_RMI4_I2C
+            trigger_baseline_state_machine(0);
+#endif
 			msm_otg_notify_charger(motg, 0);
 			msm_otg_reset(otg->phy);
 			pm_runtime_put_noidle(otg->phy->dev);
@@ -3376,6 +3395,7 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 		hsusb_vddcx = devm_regulator_get(motg->phy.dev, "HSUSB_VDDCX");
 		if (IS_ERR(hsusb_vddcx)) {
 			dev_err(motg->phy.dev, "unable to get hsusb vddcx\n");
+			ret = PTR_ERR(hsusb_vddcx);
 			goto devote_xo_handle;
 		}
 		motg->vdd_type = VDDCX;
@@ -3404,6 +3424,7 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 							"mhl_usb_hs_switch");
 		if (IS_ERR(mhl_usb_hs_switch)) {
 			dev_err(&pdev->dev, "Unable to get mhl_usb_hs_switch\n");
+			ret = PTR_ERR(mhl_usb_hs_switch);
 			goto free_ldo_init;
 		}
 	}

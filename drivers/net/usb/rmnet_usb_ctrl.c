@@ -271,7 +271,7 @@ resubmit_int_urb:
 			__func__, status);
 }
 
-static int rmnet_usb_ctrl_start_rx(struct rmnet_ctrl_dev *dev)
+int rmnet_usb_ctrl_start_rx(struct rmnet_ctrl_dev *dev)
 {
 	int	retval = 0;
 
@@ -296,18 +296,6 @@ int rmnet_usb_ctrl_stop_rx(struct rmnet_ctrl_dev *dev)
 	usb_kill_urb(dev->inturb);
 
 	return 0;
-}
-
-int rmnet_usb_ctrl_start(struct rmnet_ctrl_dev *dev)
-{
-	int	status = 0;
-
-	mutex_lock(&dev->dev_lock);
-	if (dev->is_opened)
-		status = rmnet_usb_ctrl_start_rx(dev);
-	mutex_unlock(&dev->dev_lock);
-
-	return status;
 }
 
 static int rmnet_usb_ctrl_alloc_rx(struct rmnet_ctrl_dev *dev)
@@ -416,7 +404,7 @@ static int rmnet_usb_ctrl_write(struct rmnet_ctrl_dev *dev, char *buf,
 
 	result = usb_autopm_get_interface(dev->intf);
 	if (result < 0) {
-		dev_err(dev->devicep, "%s: Unable to resume interface: %d\n",
+		dev_dbg(dev->devicep, "%s: Unable to resume interface: %d\n",
 			__func__, result);
 
 		/*
@@ -681,7 +669,7 @@ static int rmnet_ctrl_tiocmset(struct rmnet_ctrl_dev *dev, unsigned int set,
 
 	retval = usb_autopm_get_interface(dev->intf);
 	if (retval < 0) {
-		dev_err(dev->devicep, "%s: Unable to resume interface: %d\n",
+		dev_dbg(dev->devicep, "%s: Unable to resume interface: %d\n",
 			__func__, retval);
 		return retval;
 	}

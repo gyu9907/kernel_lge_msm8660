@@ -1184,6 +1184,20 @@ static struct msm_sensor_output_info_t mt9m114_dimensions[] = {
 	},
 };
 
+#ifdef CONFIG_LGE_CAMERA
+static struct msm_camera_csi_params mt9m114_csi_params = {
+	.data_format = CSI_8BIT,
+	.lane_cnt    = 1,
+	.lane_assign = 0xe4,
+	.dpcm_scheme = 0,
+	.settle_cnt  = 0x14,
+};
+
+static struct msm_camera_csi_params *mt9m114_csi_params_array[] = {
+	&mt9m114_csi_params,
+	&mt9m114_csi_params,
+};
+#else
 static struct msm_camera_csid_vc_cfg mt9m114_cid_cfg[] = {
 	{0, CSI_YUV422_8, CSI_DECODE_8BIT},
 	{1, CSI_EMBED_DATA, CSI_DECODE_8BIT},
@@ -1207,12 +1221,13 @@ static struct msm_camera_csi2_params *mt9m114_csi_params_array[] = {
 	&mt9m114_csi_params,
 	&mt9m114_csi_params,
 };
+#endif
 
 static struct msm_sensor_output_reg_addr_t mt9m114_reg_addr = {
 	.x_output = 0xC868,
 	.y_output = 0xC86A,
-	.line_length_pclk = 0xC868,
-	.frame_length_lines = 0xC86A,
+	.line_length_pclk = 0xC814,
+	.frame_length_lines = 0xC812,
 };
 
 static struct msm_sensor_id_info_t mt9m114_id_info = {
@@ -1261,7 +1276,11 @@ static struct v4l2_subdev_ops mt9m114_subdev_ops = {
 static struct msm_sensor_fn_t mt9m114_func_tbl = {
 	.sensor_start_stream = msm_sensor_start_stream,
 	.sensor_stop_stream = mt9m114_stop_stream,
+#ifdef CONFIG_LGE_CAMERA
+	.sensor_csi_setting = msm_sensor_setting1,
+#else
 	.sensor_setting = msm_sensor_setting,
+#endif
 	.sensor_set_sensor_mode = msm_sensor_set_sensor_mode,
 	.sensor_mode_init = msm_sensor_mode_init,
 	.sensor_get_output_info = msm_sensor_get_output_info,
@@ -1291,7 +1310,11 @@ static struct msm_sensor_ctrl_t mt9m114_s_ctrl = {
 	.sensor_output_reg_addr = &mt9m114_reg_addr,
 	.sensor_id_info = &mt9m114_id_info,
 	.cam_mode = MSM_SENSOR_MODE_INVALID,
+#ifdef CONFIG_LGE_CAMERA
+	.csic_params = &mt9m114_csi_params_array[0],
+#else
 	.csi_params = &mt9m114_csi_params_array[0],
+#endif	
 	.msm_sensor_mutex = &mt9m114_mut,
 	.sensor_i2c_driver = &mt9m114_i2c_driver,
 	.sensor_v4l2_subdev_info = mt9m114_subdev_info,

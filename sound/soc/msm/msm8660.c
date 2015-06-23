@@ -161,6 +161,8 @@ static int msm8660_hw_params(struct snd_pcm_substream *substream,
 static int msm8660_startup(struct snd_pcm_substream *substream)
 {
 	int ret = 0;
+	pr_info("[%s:%s]\n", __MM_FILE__, __func__);	//                      
+
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		rx_osr_clk = clk_get(NULL, "i2s_spkr_osr_clk");
 		if (IS_ERR(rx_osr_clk)) {
@@ -238,6 +240,7 @@ static int msm8660_startup(struct snd_pcm_substream *substream)
  */
 static void msm8660_shutdown(struct snd_pcm_substream *substream)
 {
+	pr_info("[%s:%s]\n", __MM_FILE__, __func__);	//                      
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		rx_hw_param_status = 0;
 		timpani_poweramp_off();

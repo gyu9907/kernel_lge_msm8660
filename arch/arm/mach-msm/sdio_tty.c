@@ -29,6 +29,9 @@
 #define MAX_SDIO_TTY_DEVS		2
 #define MAX_SDIO_TTY_DEV_NAME_SIZE	25
 
+//                                 
+#define CONFIG_LGE_SDIO_CSD
+
 /* Configurations per channel device */
 /* CSVT */
 #define SDIO_TTY_CSVT_DEV		"sdio_tty_csvt_0"
@@ -105,7 +108,11 @@ static void sdio_tty_read(struct work_struct *work)
 		return ;
 	}
 
-	if (sdio_tty_drv->sdio_tty_state != TTY_OPENED) {
+	if (sdio_tty_drv->sdio_tty_state != TTY_OPENED
+#ifdef CONFIG_LGE_SDIO_CSD
+    	&& sdio_tty_drv->sdio_tty_state != TTY_CLOSED
+#endif	
+	) {
 		pr_err(SDIO_TTY_MODULE_NAME ": %s: sdio_tty_state = %d",
 			__func__, sdio_tty_drv->sdio_tty_state);
 		return;
@@ -125,6 +132,9 @@ static void sdio_tty_read(struct work_struct *work)
 					": %s: TTY_THROTTLED bit is set for "
 					"dev %s, exit", __func__,
 					sdio_tty_drv->tty_dev_name);
+#ifdef CONFIG_LGE_SDIO_CSD
+		    if (sdio_tty_drv->sdio_tty_state == TTY_OPENED)
+#endif
 			return;
 		}
 
@@ -160,6 +170,15 @@ static void sdio_tty_read(struct work_struct *work)
 				sdio_tty_drv->tty_dev_name);
 			return;
 		}
+
+#ifdef CONFIG_LGE_SDIO_CSD
+        if (sdio_tty_drv->sdio_tty_state == TTY_CLOSED)
+        {
+			DEBUG_MSG(sdio_tty_drv, SDIO_TTY_MODULE_NAME ": %s: sdio_read already closed (%d)",
+			       __func__, read_avail);     
+			continue;
+        }
+#endif	
 
 		left = read_avail;
 		do {
@@ -317,7 +336,11 @@ static void sdio_tty_notify(void *priv, unsigned event)
 			__func__);
 	}
 
-	if (sdio_tty_drv->sdio_tty_state != TTY_OPENED) {
+	if (sdio_tty_drv->sdio_tty_state != TTY_OPENED
+#ifdef CONFIG_LGE_SDIO_CSD
+    	&& sdio_tty_drv->sdio_tty_state != TTY_CLOSED
+#endif	
+	) {
 		pr_err(SDIO_TTY_MODULE_NAME ": %s: sdio_tty_state = %d",
 			__func__, sdio_tty_drv->sdio_tty_state);
 		return;
@@ -377,10 +400,21 @@ static int sdio_tty_open(struct tty_struct *tty, struct file *file)
 	tty->driver_data = sdio_tty_drv;
 
 	sdio_tty_drv->tty_str = tty;
+
+#ifndef CONFIG_LGE_SDIO_CSD
 	sdio_tty_drv->tty_str->low_latency = 1;
 	sdio_tty_drv->tty_str->icanon = 0;
 	set_bit(TTY_NO_WRITE_SPLIT, &sdio_tty_drv->tty_str->flags);
+#endif
 
+#ifdef CONFIG_LGE_SDIO_CSD
+    if (sdio_tty_drv->read_buf != NULL)
+    {
+		pr_info(SDIO_TTY_MODULE_NAME ": %s: read_buf allocated %p",
+		       __func__, sdio_tty_drv->read_buf);
+    }
+    else
+#endif
 	sdio_tty_drv->read_buf = kzalloc(SDIO_TTY_MAX_PACKET_SIZE, GFP_KERNEL);
 	if (sdio_tty_drv->read_buf == NULL) {
 		pr_err(SDIO_TTY_MODULE_NAME ": %s: failed to allocate read_buf "
@@ -388,12 +422,24 @@ static int sdio_tty_open(struct tty_struct *tty, struct file *file)
 		return -ENOMEM;
 	}
 
+#ifdef CONFIG_LGE_SDIO_CSD
+    if (sdio_tty_drv->workq != NULL)
+    {
+		pr_info(SDIO_TTY_MODULE_NAME ": %s: workq allocated %p",
+		       __func__, sdio_tty_drv->workq);  
+    }
+    else
+#endif
 	sdio_tty_drv->workq = create_singlethread_workqueue("sdio_tty_read");
 	if (!sdio_tty_drv->workq) {
 		pr_err(SDIO_TTY_MODULE_NAME ": %s: failed to create workq "
 			"for dev %s", __func__, sdio_tty_drv->tty_dev_name);
 		return -ENOMEM;
 	}
+
+#ifdef CONFIG_LGE_SDIO_CSD
+    sdio_tty_drv->sdio_tty_state = TTY_OPENED;
+#endif
 
 	if (!sdio_tty_drv->is_sdio_open) {
 		ret = sdio_open(sdio_tty_drv->sdio_ch_name, &sdio_tty_drv->ch,
@@ -403,6 +449,10 @@ static int sdio_tty_open(struct tty_struct *tty, struct file *file)
 				"for dev %s\n", __func__, ret,
 				sdio_tty_drv->tty_dev_name);
 			destroy_workqueue(sdio_tty_drv->workq);
+#ifdef CONFIG_LGE_SDIO_CSD
+            sdio_tty_drv->workq = NULL;
+            sdio_tty_drv->sdio_tty_state = TTY_CLOSED;
+#endif			
 			return ret;
 		}
 
@@ -418,8 +468,9 @@ static int sdio_tty_open(struct tty_struct *tty, struct file *file)
 
 	}
 
+#ifndef CONFIG_LGE_SDIO_CSD
 	sdio_tty_drv->sdio_tty_state = TTY_OPENED;
-
+#endif
 	pr_info(SDIO_TTY_MODULE_NAME ": %s: TTY device(%s) opened\n",
 		__func__, sdio_tty_drv->tty_dev_name);
 
@@ -459,13 +510,19 @@ static void sdio_tty_close(struct tty_struct *tty, struct file *file)
 	if (--sdio_tty_drv->tty_open_count != 0)
 		return;
 
+#ifdef CONFIG_LGE_SDIO_CSD
+	sdio_tty_drv->sdio_tty_state = TTY_CLOSED;
+	flush_workqueue(sdio_tty_drv->workq);	
+#else
 	flush_workqueue(sdio_tty_drv->workq);
 	destroy_workqueue(sdio_tty_drv->workq);
 
 	kfree(sdio_tty_drv->read_buf);
 	sdio_tty_drv->read_buf = NULL;
 
+
 	sdio_tty_drv->sdio_tty_state = TTY_CLOSED;
+#endif
 
 	pr_info(SDIO_TTY_MODULE_NAME ": %s: SDIO_TTY device(%s) closed\n",
 		__func__, sdio_tty_drv->tty_dev_name);
@@ -486,7 +543,11 @@ static void sdio_tty_unthrottle(struct tty_struct *tty)
 		return;
 	}
 
-	if (sdio_tty_drv->sdio_tty_state != TTY_OPENED) {
+	if (sdio_tty_drv->sdio_tty_state != TTY_OPENED
+#ifdef CONFIG_LGE_SDIO_CSD
+    	&& sdio_tty_drv->sdio_tty_state != TTY_CLOSED
+#endif
+	    ) {
 		pr_err(SDIO_TTY_MODULE_NAME ": %s: sdio_tty_state = %d",
 		       __func__, sdio_tty_drv->sdio_tty_state);
 		return;
@@ -565,11 +626,20 @@ int sdio_tty_init_tty(char *tty_name, char *sdio_ch_name,
 
 	/* initializing the tty driver */
 	sdio_tty_drv->tty_drv->init_termios = tty_std_termios;
+
+#ifdef CONFIG_LGE_SDIO_CSD
+	sdio_tty_drv->tty_drv->init_termios.c_iflag = 0;
+	sdio_tty_drv->tty_drv->init_termios.c_oflag = 0;
+	sdio_tty_drv->tty_drv->init_termios.c_cflag = B38400 | CS8 | CREAD;
+	sdio_tty_drv->tty_drv->init_termios.c_lflag = 0;
+	sdio_tty_drv->workq = NULL;
+	sdio_tty_drv->read_buf = NULL;	
+#else	
 	sdio_tty_drv->tty_drv->init_termios.c_cflag =
 		B4800 | CS8 | CREAD | HUPCL | CLOCAL;
 	sdio_tty_drv->tty_drv->init_termios.c_ispeed = INPUT_SPEED;
 	sdio_tty_drv->tty_drv->init_termios.c_ospeed = OUTPUT_SPEED;
-
+#endif
 	tty_set_operations(sdio_tty_drv->tty_drv, &sdio_tty_ops);
 
 	ret = tty_register_driver(sdio_tty_drv->tty_drv);

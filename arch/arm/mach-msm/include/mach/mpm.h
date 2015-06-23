@@ -17,6 +17,13 @@
 #include <linux/types.h>
 #include <linux/list.h>
 
+enum msm_mpm_pin {		/*                                        */
+	MSM_MPM_PIN_SDC3_DAT1 = 21,
+	MSM_MPM_PIN_SDC3_DAT3 = 22,
+	MSM_MPM_PIN_SDC4_DAT1 = 23,
+	MSM_MPM_PIN_SDC4_DAT3 = 24,
+};
+
 #define MSM_MPM_NR_MPM_IRQS  64
 
 struct msm_mpm_device_data {

@@ -25,11 +25,27 @@ struct msm_serial_hs_platform_data {
 	unsigned char inject_rx_on_wakeup;
 	char rx_to_inject;
 	int (*gpio_config)(int);
+	int userid;
 };
+
+//                                             
+//ADD: 0019639: [F200][BT] Support Bluetooth low power mode
+#if 1 //                        
+#define CLOCK_REQUEST_AVAILABLE 	0
+#define CLOCK_REQUEST_UNAVAILABLE 	1
+struct uart_port * msm_hs_get_bt_uport(unsigned int line);
+int msm_hs_get_bt_uport_clock_state(struct uart_port *uport);
+#endif/*                    */
+//                                           
 
 unsigned int msm_hs_tx_empty(struct uart_port *uport);
 void msm_hs_request_clock_off(struct uart_port *uport);
 void msm_hs_request_clock_on(struct uart_port *uport);
 void msm_hs_set_mctrl(struct uart_port *uport,
 				    unsigned int mctrl);
+#if defined(CONFIG_MACH_LGE_I_BOARD) || defined(CONFIG_MACH_LGE_325_BOARD)
+struct uart_port * msm_hs_get_bt_uport(unsigned int line);
+#endif
+
+
 #endif

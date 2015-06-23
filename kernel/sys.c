@@ -314,12 +314,19 @@ void emergency_restart(void)
 }
 EXPORT_SYMBOL_GPL(emergency_restart);
 
+#if defined(CONFIG_LGE_DISPLAY_MIPI_HITACHI_VIDEO_HD_PT) || defined(CONFIG_LGE_DISPLAY_MIPI_LGIT_VIDEO_HD_PT) //                                    
+extern void mipi_dsi_panel_power_off_shutdown(void);
+#endif
+
 void kernel_restart_prepare(char *cmd)
 {
 	blocking_notifier_call_chain(&reboot_notifier_list, SYS_RESTART, cmd);
 	system_state = SYSTEM_RESTART;
 	usermodehelper_disable();
 	device_shutdown();
+#if defined(CONFIG_LGE_DISPLAY_MIPI_HITACHI_VIDEO_HD_PT) || defined(CONFIG_LGE_DISPLAY_MIPI_LGIT_VIDEO_HD_PT) //                                    
+	mipi_dsi_panel_power_off_shutdown();
+#endif
 	syscore_shutdown();
 }
 
@@ -381,6 +388,9 @@ static void kernel_shutdown_prepare(enum system_states state)
 	system_state = state;
 	usermodehelper_disable();
 	device_shutdown();
+#if defined(CONFIG_LGE_DISPLAY_MIPI_HITACHI_VIDEO_HD_PT) || defined(CONFIG_LGE_DISPLAY_MIPI_LGIT_VIDEO_HD_PT) //                                    
+        mipi_dsi_panel_power_off_shutdown();
+#endif
 }
 /**
  *	kernel_halt - halt the system
@@ -426,6 +436,9 @@ static DEFINE_MUTEX(reboot_mutex);
  *
  * reboot doesn't sync: do that yourself before calling this.
  */
+#if 1 /*                                                          */
+atomic_t reboot_issued_from_userspace = ATOMIC_INIT(0);
+#endif
 SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 		void __user *, arg)
 {
@@ -458,6 +471,13 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 	 */
 	if ((cmd == LINUX_REBOOT_CMD_POWER_OFF) && !pm_power_off)
 		cmd = LINUX_REBOOT_CMD_HALT;
+
+#if defined(CONFIG_MACH_LGE_I_BOARD ) || defined(CONFIG_MACH_LGE_325_BOARD)	/*                                                   */
+	printk(KERN_INFO"%s: sys_reboot is called from android\n",__func__);
+	printk(KERN_INFO"%s: reboot cmd is %x\n",__func__, cmd);
+	printk(KERN_INFO"%s: %s[pid : %d] called reboot syscall\n", __func__, current->comm, current->pid);
+	atomic_inc(&reboot_issued_from_userspace);
+#endif
 
 	mutex_lock(&reboot_mutex);
 	switch (cmd) {
@@ -1179,6 +1199,7 @@ DECLARE_RWSEM(uts_sem);
  * Work around broken programs that cannot handle "Linux 3.0".
  * Instead we map 3.x to 2.6.40+x, so e.g. 3.0 would be 2.6.40
  */
+#if 0 /*                                                        */
 static int override_release(char __user *release, int len)
 {
 	int ret = 0;
@@ -1202,6 +1223,41 @@ static int override_release(char __user *release, int len)
 	}
 	return ret;
 }
+
+#else /* Google patch - fix stack memory content leak via UNAME26 */
+
+/* Calling uname() with the UNAME26 personality set allows a leak of kernel
+   stack contents.  This fixes it by defensively calculating the length of
+   copy_to_user() call, making the len argument unsigned, and initializing
+   the stack buffer to zero (now technically unneeded, but hey, overkill). */
+
+static int override_release(char __user *release, size_t len)
+{
+	int ret = 0;
+
+	if (current->personality & UNAME26) {
+		const char *rest = UTS_RELEASE;
+		char buf[65] = { 0 };
+		int ndots = 0;
+		unsigned v;
+		size_t copy;
+
+		while (*rest) {
+			if (*rest == '.' && ++ndots >= 3)
+				break;
+			if (!isdigit(*rest) && *rest != '.')
+				break;
+			rest++;
+		}
+		v = ((LINUX_VERSION_CODE >> 8) & 0xff) + 40;
+		//copy = min(sizeof(buf), max_t(size_t, 1, len));
+		copy = clamp_t(size_t, len, 1, sizeof(buf));
+		copy = scnprintf(buf, copy, "2.6.%u%s", v, rest);
+		ret = copy_to_user(release, buf, copy + 1);
+	}
+	return ret;
+}
+#endif
 
 SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 {

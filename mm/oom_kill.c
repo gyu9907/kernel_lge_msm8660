@@ -761,8 +761,10 @@ out:
 	 * Give "p" a good chance of killing itself before we
 	 * retry to allocate memory unless "p" is current
 	 */
-	if (killed && !test_thread_flag(TIF_MEMDIE))
-		schedule_timeout_uninterruptible(1);
+	//if (killed && !test_thread_flag(TIF_MEMDIE))
+	//	schedule_timeout_uninterruptible(1);
+	if (killed)
+		schedule_timeout_killable(1);
 }
 
 /*
@@ -777,6 +779,7 @@ void pagefault_out_of_memory(void)
 		out_of_memory(NULL, 0, 0, NULL, false);
 		clear_system_oom();
 	}
-	if (!test_thread_flag(TIF_MEMDIE))
-		schedule_timeout_uninterruptible(1);
+	//if (!test_thread_flag(TIF_MEMDIE))
+	//	schedule_timeout_uninterruptible(1);
+	schedule_timeout_killable(1);
 }

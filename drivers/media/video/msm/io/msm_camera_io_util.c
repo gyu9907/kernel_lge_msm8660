@@ -38,7 +38,7 @@ void msm_camera_io_w_mb(u32 data, void __iomem *addr)
 u32 msm_camera_io_r(void __iomem *addr)
 {
 	uint32_t data = readl_relaxed(addr);
-	CDBG("%s: %08x %08x\n", __func__, (int) (addr), (data));
+	//CDBG("%s: %08x %08x\n", __func__, (int) (addr), (data));
 	return data;
 }
 
@@ -263,6 +263,9 @@ int msm_camera_enable_vreg(struct device *dev, struct camera_vreg_t *cam_vreg,
 					__func__, cam_vreg[i].reg_name);
 				goto disable_vreg;
 			}
+#ifdef CONFIG_LGE_SENSOR_MT9E013		// To remove dependency of sensor's power up sequence.
+			mdelay(10); // mo2jonghoo.lee 2013.02.01
+#endif
 		}
 	} else {
 		for (i = num_vreg-1; i >= 0; i--)
@@ -372,10 +375,9 @@ int msm_camera_config_gpio_table(struct msm_camera_sensor_info *sinfo,
 		}
 	} else {
 		for (i = gpio_conf->cam_gpio_set_tbl_size - 1; i >= 0; i--) {
-			if (gpio_conf->cam_gpio_set_tbl[i].flags)
-				gpio_set_value_cansleep(
-					gpio_conf->cam_gpio_set_tbl[i].gpio,
-					GPIOF_OUT_INIT_LOW);
+			gpio_set_value_cansleep(
+				gpio_conf->cam_gpio_set_tbl[i].gpio,
+				gpio_conf->cam_gpio_set_tbl[i].flags);
 		}
 	}
 	return rc;

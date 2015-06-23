@@ -20,7 +20,11 @@
 #include <mach/qdsp6v2/audio_acdb.h>
 
 
-#define MAX_NETWORKS		12
+#ifdef CONFIG_LGE_AUDIO	/*                                        */
+#define MAX_NETWORKS        9
+#else
+#define MAX_NETWORKS		15
+#endif
 
 struct sidetone_atomic_cal {
 	atomic_t	enable;

@@ -159,7 +159,7 @@ static struct msm_camera_i2c_reg_conf ov5647_video_90fps_settings[] = {
 
 static struct msm_camera_i2c_reg_conf ov5647_zsl_settings[] = {
 	{0x3035, 0x21},
-	{0x3036, 0x2f},
+	{0x3036, 0x4f},
 	{0x3821, 0x06},
 	{0x3820, 0x00},
 	{0x3612, 0x0b},
@@ -572,7 +572,8 @@ static int32_t ov5647_write_prev_exp_gain(struct msm_sensor_ctrl_t *s_ctrl,
 	s_ctrl->func_tbl->sensor_group_hold_on(s_ctrl);
 
 	/* adjust frame rate */
-	if (line > (fl_lines - offset))
+	if ((s_ctrl->curr_res < MSM_SENSOR_RES_2) &&
+		(line > (fl_lines - offset)))
 		fl_lines = line + offset;
 
 	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,

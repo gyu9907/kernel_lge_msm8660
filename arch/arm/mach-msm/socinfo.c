@@ -114,6 +114,14 @@ struct socinfo_v6 {
 	uint32_t hw_platform_subtype;
 };
 
+struct socinfo_v7 {
+	struct socinfo_v6 v6;
+
+	/* only valid when format==7 */
+	uint32_t pmic_model;
+	uint32_t pmic_die_revision;
+};
+
 static union {
 	struct socinfo_v1 v1;
 	struct socinfo_v2 v2;
@@ -121,6 +129,7 @@ static union {
 	struct socinfo_v4 v4;
 	struct socinfo_v5 v5;
 	struct socinfo_v6 v6;
+	struct socinfo_v7 v7;
 } *socinfo;
 
 static enum msm_cpu cpu_of_id[] = {
@@ -246,6 +255,7 @@ static enum msm_cpu cpu_of_id[] = {
 	[127] = MSM_CPU_8625,
 	[128] = MSM_CPU_8625,
 	[129] = MSM_CPU_8625,
+	[137] = MSM_CPU_8625,
 
 	/* 8064 MPQ ID */
 	[130] = MSM_CPU_8064,
@@ -281,6 +291,29 @@ static struct socinfo_v1 dummy_socinfo = {
 	.format = 1,
 	.version = 1,
 };
+
+/*                                   */
+#ifdef CONFIG_LGE_PM_BATTERY_ID_CHECKER /*                                        */
+u16 *batt_id = 0;
+uint16_t battery_info_get(void)
+{
+	batt_id = smem_alloc(SMEM_BATT_INFO, sizeof(batt_id));
+
+	if( batt_id == NULL ) return 0 ;
+	return *batt_id;
+}
+EXPORT_SYMBOL(battery_info_get);
+
+u16 *poweron_st = 0;
+uint16_t power_on_status_info_get(void)
+{
+	poweron_st = smem_alloc(SMEM_POWER_ON_STATUS_INFO, sizeof(poweron_st));
+
+	if( poweron_st == NULL ) return 0 ;
+	return *poweron_st;
+}
+EXPORT_SYMBOL(power_on_status_info_get);
+#endif
 
 uint32_t socinfo_get_id(void)
 {
@@ -340,6 +373,21 @@ uint32_t socinfo_get_platform_subtype(void)
 {
 	return socinfo ?
 		(socinfo->v1.format >= 6 ? socinfo->v6.hw_platform_subtype : 0)
+		: 0;
+}
+
+enum pmic_model socinfo_get_pmic_model(void)
+{
+	return socinfo ?
+		(socinfo->v1.format >= 7 ? socinfo->v7.pmic_model
+			: PMIC_MODEL_UNKNOWN)
+		: PMIC_MODEL_UNKNOWN;
+}
+
+uint32_t socinfo_get_pmic_die_revision(void)
+{
+	return socinfo ?
+		(socinfo->v1.format >= 7 ? socinfo->v7.pmic_die_revision : 0)
 		: 0;
 }
 
@@ -515,6 +563,42 @@ socinfo_show_platform_subtype(struct sys_device *dev,
 		hw_platform_subtype[hw_subtype]);
 }
 
+static ssize_t
+socinfo_show_pmic_model(struct sys_device *dev,
+			struct sysdev_attribute *attr,
+			char *buf)
+{
+	if (!socinfo) {
+		pr_err("%s: No socinfo found!\n", __func__);
+		return 0;
+	}
+	if (socinfo->v1.format < 7) {
+		pr_err("%s: pmic_model not available!\n", __func__);
+		return 0;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%u\n",
+		socinfo_get_pmic_model());
+}
+
+static ssize_t
+socinfo_show_pmic_die_revision(struct sys_device *dev,
+			       struct sysdev_attribute *attr,
+			       char *buf)
+{
+	if (!socinfo) {
+		pr_err("%s: No socinfo found!\n", __func__);
+		return 0;
+	}
+	if (socinfo->v1.format < 7) {
+		pr_err("%s: pmic_die_revision not available!\n", __func__);
+		return 0;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%u\n",
+		socinfo_get_pmic_die_revision());
+}
+
 static struct sysdev_attribute socinfo_v1_files[] = {
 	_SYSDEV_ATTR(id, 0444, socinfo_show_id, NULL),
 	_SYSDEV_ATTR(version, 0444, socinfo_show_version, NULL),
@@ -543,6 +627,13 @@ static struct sysdev_attribute socinfo_v5_files[] = {
 static struct sysdev_attribute socinfo_v6_files[] = {
 	_SYSDEV_ATTR(platform_subtype, 0444,
 			socinfo_show_platform_subtype, NULL),
+};
+
+static struct sysdev_attribute socinfo_v7_files[] = {
+	_SYSDEV_ATTR(pmic_model, 0444,
+			socinfo_show_pmic_model, NULL),
+	_SYSDEV_ATTR(pmic_die_revision, 0444,
+			socinfo_show_pmic_die_revision, NULL),
 };
 
 static struct sysdev_class soc_sysdev_class = {
@@ -619,9 +710,14 @@ static int __init socinfo_init_sysdev(void)
 	if (socinfo->v1.format < 6)
 		return err;
 
-	return socinfo_create_files(&soc_sys_device, socinfo_v6_files,
+	socinfo_create_files(&soc_sys_device, socinfo_v6_files,
 				ARRAY_SIZE(socinfo_v6_files));
 
+	if (socinfo->v1.format < 7)
+		return err;
+
+	return socinfo_create_files(&soc_sys_device, socinfo_v7_files,
+				ARRAY_SIZE(socinfo_v7_files));
 }
 
 arch_initcall(socinfo_init_sysdev);
@@ -652,7 +748,11 @@ static void * __init setup_dummy_socinfo(void)
 
 int __init socinfo_init(void)
 {
-	socinfo = smem_alloc(SMEM_HW_SW_BUILD_ID, sizeof(struct socinfo_v6));
+	socinfo = smem_alloc(SMEM_HW_SW_BUILD_ID, sizeof(struct socinfo_v7));
+
+	if (!socinfo)
+		socinfo = smem_alloc(SMEM_HW_SW_BUILD_ID,
+				sizeof(struct socinfo_v6));
 
 	if (!socinfo)
 		socinfo = smem_alloc(SMEM_HW_SW_BUILD_ID,
@@ -743,6 +843,20 @@ int __init socinfo_init(void)
 			socinfo->v3.hw_platform, socinfo->v4.platform_version,
 			socinfo->v5.accessory_chip,
 			socinfo->v6.hw_platform_subtype);
+		break;
+	case 7:
+		pr_info("%s: v%u, id=%u, ver=%u.%u, raw_id=%u, raw_ver=%u, hw_plat=%u, hw_plat_ver=%u\n accessory_chip=%u, hw_plat_subtype=%u, pmic_model=%u, pmic_die_revision=%u\n",
+			__func__,
+			socinfo->v1.format,
+			socinfo->v1.id,
+			SOCINFO_VERSION_MAJOR(socinfo->v1.version),
+			SOCINFO_VERSION_MINOR(socinfo->v1.version),
+			socinfo->v2.raw_id, socinfo->v2.raw_version,
+			socinfo->v3.hw_platform, socinfo->v4.platform_version,
+			socinfo->v5.accessory_chip,
+			socinfo->v6.hw_platform_subtype,
+			socinfo->v7.pmic_model,
+			socinfo->v7.pmic_die_revision);
 		break;
 	default:
 		pr_err("%s: Unknown format found\n", __func__);

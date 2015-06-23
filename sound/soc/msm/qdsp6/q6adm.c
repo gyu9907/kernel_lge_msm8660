@@ -602,7 +602,8 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology)
 	int ret = 0;
 	int index;
 
-	pr_debug("%s: port %d path:%d rate:%d mode:%d\n", __func__,
+//                                                                                     
+    pr_info("%s: port %d path:%d rate:%d mode:%d\n", __func__,
 				port_id, path, rate, channel_mode);
 
 	port_id = afe_convert_virtual_to_portid(port_id);
@@ -819,7 +820,8 @@ int adm_multi_ch_copp_open(int port_id, int path, int rate, int channel_mode,
 		open.channel_config = channel_mode & 0x00FF;
 		open.rate  = rate;
 
-		pr_debug("%s: channel_config=%d port_id=%d rate=%d"
+//                                                                              
+        pr_info("%s: channel_config=%d port_id=%d rate=%d"
 			" topology_id=0x%X\n", __func__, open.channel_config,
 			open.endpoint_id1, open.rate,
 			open.topology_id);
@@ -1119,7 +1121,8 @@ int adm_close(int port_id)
 	if (afe_validate_port(port_id) < 0)
 		return -EINVAL;
 
-	pr_debug("%s port_id=%d index %d\n", __func__, port_id, index);
+//                                                                                         
+    pr_info("%s port_id=%d index %d\n", __func__, port_id, index);
 
 	if (!(atomic_read(&this_adm.copp_cnt[index]))) {
 		pr_err("%s: copp count for port[%d]is 0\n", __func__, port_id);

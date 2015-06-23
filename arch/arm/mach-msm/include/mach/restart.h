@@ -17,12 +17,17 @@
 #define RESTART_NORMAL 0x0
 #define RESTART_DLOAD  0x1
 
-#if defined(CONFIG_LGE_CRASH_HANDLER)
-#define SUB_THD_F_PWR	0x0190
-#define SUB_THD_F_SD	0x0110
-#define SUB_UNAB_THD	0x0120
-#define SUB_RESET_SOC	0x0130
-#define SUB_UNKNOWN	0x0140
+/*                            
+                         */
+#if defined(CONFIG_LGE_ERROR_HANDLER)	/*                                        */
+#define SUB_THD_F_PWR		0x0190
+#define SUB_THD_F_SD		0x0110
+#define SUB_UNAB_THD		0x0120
+#define SUB_RESET_SOC		0x0130
+#define SUB_RESET_SOC_8K	0x0131
+#define SUB_RESET_SOC_9K	0x0132
+#define SUB_RESET_SOC_Q6	0x0133
+#define SUB_UNKNOWN			0x0140
 #endif
 
 #if defined(CONFIG_MSM_NATIVE_RESTART)

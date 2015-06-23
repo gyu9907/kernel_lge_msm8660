@@ -28,7 +28,16 @@
 #include <mach/msm_rpcrouter.h>
 #include <mach/oem_rapi_client.h>
 
+/*                                        */
+//                                                                                
+#if defined (CONFIG_MACH_LGE_I_BOARD_LGU) || defined (CONFIG_MACH_LGE_I_BOARD_VZW) || defined (CONFIG_MACH_LGE_325_BOARD_VZW) || defined (CONFIG_MACH_LGE_IJB_BOARD_LGU) || defined (CONFIG_MACH_LGE_IJB_BOARD_VZW)
 #define OEM_RAPI_PROG  0x3000006B
+#elif defined (CONFIG_MACH_LGE_I_BOARD_SKT) || defined (CONFIG_MACH_LGE_I_BOARD_ATNT) || defined (CONFIG_MACH_LGE_I_BOARD_DCM) || defined(CONFIG_MACH_LGE_325_BOARD_DCM) || defined(CONFIG_MACH_LGE_325_BOARD_SKT) || defined (CONFIG_MACH_LGE_IJB_BOARD_SKT) || defined (CONFIG_MACH_LGE_IJB_BOARD_ATNT) || defined (CONFIG_MACH_LGE_IJB_BOARD_DCM)
+#define OEM_RAPI_PROG  0x3001006B //PROG ID of MDM
+#else
+#define OEM_RAPI_PROG  0x3000006B
+#endif
+
 #define OEM_RAPI_VERS  0x00010001
 
 #define OEM_RAPI_NULL_PROC                        0
@@ -173,6 +182,15 @@ int oem_rapi_client_streaming_function(
 	struct oem_rapi_client_streaming_func_arg *arg,
 	struct oem_rapi_client_streaming_func_ret *ret)
 {
+	/*                                        */
+	/*                                                                */
+	if (IS_ERR(client))
+	{
+		pr_err("%s fail!! and return",__func__);
+		return -1;
+	}
+	/*                         */
+
 	return msm_rpc_client_req2(client,
 				   OEM_RAPI_STREAMING_FUNCTION_PROC,
 				   oem_rapi_client_streaming_function_arg, arg,
@@ -334,6 +352,17 @@ static const struct file_operations debug_ops = {
 	.read = debug_read,
 	.write = debug_write,
 };
+
+#if 1 /*                                        */
+/*                                            */
+/* MOD 0014110: [FACTORY RESET] stability */
+/* sync up with oem_rapi */
+uint32_t get_oem_rapi_open_cnt(void)
+{
+	return open_count;
+}
+EXPORT_SYMBOL(get_oem_rapi_open_cnt);
+#endif
 
 static void __exit oem_rapi_client_mod_exit(void)
 {

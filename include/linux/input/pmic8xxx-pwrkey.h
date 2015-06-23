@@ -32,6 +32,9 @@ struct pm8xxx_pwrkey_platform_data  {
 	 * closest level. Any value outside the valid range will be rejected.
 	 */
 	u32  kpd_trigger_delay_us;
+#if 1 /*                                               */
+	u32 pwrkey_time_ms;
+#endif
 	u32  wakeup;
 };
 

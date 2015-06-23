@@ -31,7 +31,14 @@
 #include <mach/qdsp6v2/audio_dev_ctl.h>
 
 #define MAX_BUF 2
+
+#ifdef LVVE
+/* Copyright 2011 NXP Software, begin */
+#define BUFSZ (9600)
+#else
 #define BUFSZ (4800)
+/* Copyright 2011 NXP Software, end */
+#endif
 
 struct pcm {
 	struct mutex lock;
@@ -39,6 +46,13 @@ struct pcm {
 	spinlock_t   dsp_lock;
 	wait_queue_head_t write_wait;
 	struct audio_client *ac;
+#ifdef LVVE
+/* Copyright 2011 NXP Software, begin */
+	unsigned long bytes_written;
+	unsigned long num_bufs_acked;
+	struct msm_audio_htimestamp tstamp;
+/* Copyright 2011 NXP Software, end */
+#endif
 	uint32_t sample_rate;
 	uint32_t channel_count;
 	uint32_t buffer_size;
@@ -63,6 +77,19 @@ void pcm_out_cb(uint32_t opcode, uint32_t token,
 	spin_lock_irqsave(&pcm->dsp_lock, flags);
 	switch (opcode) {
 	case ASM_DATA_EVENT_WRITE_DONE:
+
+#ifdef LVVE
+/* Copyright 2011 NXP Software, begin */
+			getnstimeofday(&pcm->tstamp.time);
+			pcm->num_bufs_acked++;
+			pcm->tstamp.avail = (MAX_BUF*BUFSZ) - (pcm->bytes_written - (BUFSZ * pcm->num_bufs_acked));
+
+            /*
+			pr_err("NXP:%s() Rx_timestamp Avail=[%5lu] Secs=[%10lu] nSecs=[%9lu] num_bufs_acked(%lu) bytes_written(%lu) at %d in pcm_out.c Kernel \n", \
+					__func__, pcm->tstamp.avail, pcm->tstamp.time.tv_sec, pcm->tstamp.time.tv_nsec, pcm->num_bufs_acked, pcm->bytes_written, __LINE__);
+            */
+/* Copyright 2011 NXP Software, end */
+#endif
 		atomic_inc(&pcm->out_count);
 		wake_up(&pcm->write_wait);
 		break;
@@ -89,6 +116,7 @@ static void audio_allow_sleep(struct pcm *audio)
 
 static int pcm_out_enable(struct pcm *pcm)
 {
+	pr_info("[%s:%s]\n", __MM_FILE__, __func__);	//                      
 	if (atomic_read(&pcm->out_enabled))
 		return 0;
 	return q6asm_run(pcm->ac, 0, 0, 0);
@@ -97,6 +125,7 @@ static int pcm_out_enable(struct pcm *pcm)
 static int pcm_out_disable(struct pcm *pcm)
 {
 	int rc = 0;
+	pr_info("[%s:%s]\n", __MM_FILE__, __func__);	//                      
 
 	if (atomic_read(&pcm->out_opened)) {
 		atomic_set(&pcm->out_enabled, 0);
@@ -129,6 +158,19 @@ static int config(struct pcm *pcm)
 
 		atomic_set(&pcm->out_prefill, 1);
 		atomic_set(&pcm->out_count, pcm->buffer_count);
+#ifdef LVVE
+/* Copyright 2011 NXP Software, begin */
+		pcm->tstamp.avail = (MAX_BUF*BUFSZ);
+		pcm->tstamp.time.tv_nsec = 0;
+		pcm->tstamp.time.tv_sec = 0;
+		pcm->bytes_written = 0;
+		pcm->num_bufs_acked = 0;
+        /*
+		pr_err("NXP: %s(): Rx_timestamp Avail=[%5lu] Secs=[%10lu] nSecs=[%9lu] bytes_written(%lu) num_bufs_acked(%lu) sampling : [%d], channl_count : [%d] at [%d] in qdsp6v2/pcm_out.c Kernel\n", \
+				__func__, pcm->tstamp.avail, pcm->tstamp.time.tv_sec, pcm->tstamp.time.tv_nsec, pcm->bytes_written, pcm->num_bufs_acked, pcm->sample_rate, pcm->channel_count, __LINE__);
+        */
+/* Copyright 2011 NXP Software, end */
+#endif
 	}
 fail:
 	return rc;
@@ -167,6 +209,31 @@ static long pcm_out_ioctl(struct file *file, unsigned int cmd,
 	struct pcm *pcm = file->private_data;
 	int rc = 0;
 
+#ifdef LVVE
+/* Copyright 2011 NXP Software, begin */
+	unsigned long flags = 0;
+	struct msm_audio_htimestamp tstamp;
+	if(cmd == AUDIO_PCM_HTIMESTAMP)
+	{
+		//pr_err("NXP: %s(): cmd(AUDIO_PCM_HTIMESTAMP) at %d in qdsp6v2/pcm_out.c\n", __func__, __LINE__);
+
+		spin_lock_irqsave(&pcm->dsp_lock, flags);
+		tstamp.avail = pcm->tstamp.avail % (MAX_BUF * BUFSZ + 1);
+		tstamp.time  = pcm->tstamp.time;
+		spin_unlock_irqrestore(&pcm->dsp_lock, flags);
+		if(copy_to_user((void *) arg, &tstamp, sizeof(tstamp)))
+		{
+			//pr_err("NXP: %s(): copy_to_user error : [%d] pcm_out.c\n", __func__, __LINE__);
+			rc = -EFAULT;
+		}
+		else
+			rc = 0;
+
+		return rc;
+	}
+/* Copyright 2011 NXP Software, end */
+#endif //LVVE
+
 	if (cmd == AUDIO_GET_STATS) {
 		struct msm_audio_stats stats;
 		memset(&stats, 0, sizeof(stats));
@@ -179,6 +246,8 @@ static long pcm_out_ioctl(struct file *file, unsigned int cmd,
 	switch (cmd) {
 	case AUDIO_SET_VOLUME: {
 		int vol;
+        pr_info("[%s:%s]AUDIO_SET_VOLUME\n", __MM_FILE__, __func__);	//                      
+
 		if (copy_from_user(&vol, (void *) arg, sizeof(vol))) {
 			rc = -EFAULT;
 			break;
@@ -251,10 +320,10 @@ static long pcm_out_ioctl(struct file *file, unsigned int cmd,
 		pcm->channel_count = config.channel_count;
 		pcm->buffer_size = config.buffer_size;
 		pcm->buffer_count = config.buffer_count;
-		pr_debug("%s:buffer_size:%d buffer_count:%d sample_rate:%d \
-			channel_count:%d\n",  __func__, pcm->buffer_size,
+        pr_info("%s:buffer_size:%d buffer_count:%d sample_rate:%d channel_count:%d\n",
+			__func__, pcm->buffer_size,
 			pcm->buffer_count, pcm->sample_rate,
-			pcm->channel_count);
+			pcm->channel_count);	//                      
 		break;
 	}
 	case AUDIO_GET_CONFIG: {
@@ -304,7 +373,13 @@ static int pcm_out_open(struct inode *inode, struct file *file)
 	}
 
 	pcm->channel_count = 2;
+#ifdef LVVE
+/* Copyright 2011 NXP Software, begin */
+	pcm->sample_rate = 48000;
+#else
 	pcm->sample_rate = 44100;
+/* Copyright 2011 NXP Software, end */
+#endif
 	pcm->buffer_size = BUFSZ;
 	pcm->buffer_count = MAX_BUF;
 	pcm->stream_event = AUDDEV_EVT_STREAM_VOL_CHG;
@@ -370,6 +445,11 @@ static ssize_t pcm_out_write(struct file *file, const char __user *buf,
 	int rc = 0;
 	uint32_t size;
 
+#ifdef LVVE
+/* Copyright 2011 NXP Software, begin */
+	unsigned long flags = 0;
+/* Copyright 2011 NXP Software, end */
+#endif
 	if (!pcm->ac)
 		return -ENODEV;
 
@@ -378,6 +458,16 @@ static ssize_t pcm_out_write(struct file *file, const char __user *buf,
 		if (rc < 0)
 			return rc;
 	}
+#ifdef LVVE
+
+/* Copyright 2011 NXP Software, begin */
+	spin_lock_irqsave(&pcm->dsp_lock, flags);
+	pcm->bytes_written += count;
+	spin_unlock_irqrestore(&pcm->dsp_lock, flags);
+
+	//pr_err(" NXP: %s(): count(%d) sample_rate(%d) bytes_written(%lu) at %d in qdsp6v2/pcm_out.c\n", __func__, count, pcm->sample_rate, pcm->bytes_written, __LINE__);
+/* Copyright 2011 NXP Software, end */
+#endif
 
 	mutex_lock(&pcm->write_lock);
 	while (count > 0) {

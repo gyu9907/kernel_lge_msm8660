@@ -98,3 +98,11 @@ config FAT_DEFAULT_IOCHARSET
 
 	  Enable any character sets you need in File Systems/Native Language
 	  Support.
+
+# 2013-02-15
+config LGE_B2B_VMWARE
+       bool "VMware Mobile Virtualization Platform Kernel Patch"
+       default n
+       help
+     Say Y here to enable the applying kernel patchs
+     for VMware's Mobile Virtualization Platform

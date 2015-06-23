@@ -428,6 +428,7 @@ static int snddev_icodec_open_tx(struct snddev_icodec_state *icodec)
 	union afe_port_config afe_config;
 	struct snddev_icodec_drv_state *drv = &snddev_icodec_drv;;
 
+	pr_info("%s\n", __func__);	//                      
 	pm_qos_update_request(&drv->tx_pm_qos_req,
 			      msm_cpuidle_get_deep_idle_latency());
 
@@ -532,6 +533,7 @@ error_pamp:
 static int snddev_icodec_close_lb(struct snddev_icodec_state *icodec)
 {
 	struct snddev_icodec_drv_state *drv = &snddev_icodec_drv;
+	pr_info("%s\n", __func__);	//                      
 
 	/* Disable power amplifier */
 	if (icodec->data->pamp_off)
@@ -556,6 +558,7 @@ static int snddev_icodec_close_lb(struct snddev_icodec_state *icodec)
 static int snddev_icodec_close_rx(struct snddev_icodec_state *icodec)
 {
 	struct snddev_icodec_drv_state *drv = &snddev_icodec_drv;
+	pr_info("%s\n", __func__);	//                      
 
 	pm_qos_update_request(&drv->rx_pm_qos_req,
 			      msm_cpuidle_get_deep_idle_latency());
@@ -594,6 +597,7 @@ static int snddev_icodec_close_rx(struct snddev_icodec_state *icodec)
 static int snddev_icodec_close_tx(struct snddev_icodec_state *icodec)
 {
 	struct snddev_icodec_drv_state *drv = &snddev_icodec_drv;
+	pr_info("%s\n", __func__);	//                      
 
 	pm_qos_update_request(&drv->tx_pm_qos_req,
 			      msm_cpuidle_get_deep_idle_latency());

@@ -48,20 +48,19 @@ enum msm_camera_i2c_data_type {
 enum msm_camera_i2c_cmd_type {
 	MSM_CAMERA_I2C_CMD_WRITE,
 	MSM_CAMERA_I2C_CMD_POLL,
+//                                                       
+#if defined(CONFIG_LGE_CAMERA) && defined(CONFIG_LGE_SENSOR_MT9M114) && defined(CONFIG_MSM_CAMERA_V4L2)
+	MSM_CAMERA_I2C_CMD_SLEEP,
+#endif
+//                                                      
 };
 
 struct msm_camera_i2c_reg_conf {
 	uint16_t reg_addr;
 	uint16_t reg_data;
-	int16_t mask;
 	enum msm_camera_i2c_data_type dt;
 	enum msm_camera_i2c_cmd_type cmd_type;
-};
-
-struct msm_camera_i2c_reg_tbl {
-	uint16_t reg_addr;
-	uint16_t reg_data;
-	uint16_t delay;
+	int16_t mask;
 };
 
 struct msm_camera_i2c_conf_array {
@@ -113,11 +112,6 @@ int32_t msm_camera_i2c_poll(struct msm_camera_i2c_client *client,
 	uint16_t addr, uint16_t data,
 	enum msm_camera_i2c_data_type data_type);
 
-int32_t msm_camera_i2c_write_table_w_microdelay(
-	struct msm_camera_i2c_client *client,
-	struct msm_camera_i2c_reg_tbl *reg_tbl, uint16_t size,
-	enum msm_camera_i2c_data_type data_type);
-
 int32_t msm_camera_i2c_write_tbl(struct msm_camera_i2c_client *client,
 	struct msm_camera_i2c_reg_conf *reg_conf_tbl, uint16_t size,
 	enum msm_camera_i2c_data_type data_type);
@@ -130,4 +124,38 @@ int32_t msm_sensor_write_enum_conf_array(struct msm_camera_i2c_client *client,
 
 int32_t msm_sensor_write_all_conf_array(struct msm_camera_i2c_client *client,
 	struct msm_camera_i2c_conf_array *array, uint16_t size);
+
+#if defined(CONFIG_LGE_CAMERA) && defined(CONFIG_LGE_SENSOR_MT9M114) && defined(CONFIG_MSM_CAMERA_V4L2)
+int32_t msm_camera_i2c_write_tbl_114(struct msm_camera_i2c_client *client,
+	struct msm_camera_i2c_reg_conf *reg_conf_tbl, uint16_t size,
+	enum msm_camera_i2c_data_type data_type);
+
+int32_t msm_sensor_write_conf_array_114(struct msm_camera_i2c_client *client,
+			struct msm_camera_i2c_conf_array *array, uint16_t index);
+
+int32_t msm_sensor_write_all_conf_array_114(struct msm_camera_i2c_client *client,
+			struct msm_camera_i2c_conf_array *array, uint16_t size);
+
+int32_t mt9m114_i2c_read(struct msm_camera_i2c_client *client,
+	uint16_t raddr, unsigned short *rdata, enum msm_camera_i2c_reg_addr_type addr_type);
+
+int32_t mt9m114_i2c_write_w_sensor(struct msm_camera_i2c_client *client,uint16_t waddr, uint16_t wdata);
+
+int32_t mt9m114_i2c_txdata(struct msm_camera_i2c_client *dev_client,
+	unsigned char *txdata, int length);
+
+int32_t mt9m114_i2c_rxdata(struct msm_camera_i2c_client *dev_client, 
+	unsigned char *rxdata, int length);
+#endif
+
+//mkkim add		
+#ifdef CONFIG_LGE_CAMERA
+int32_t msm_camera_i2c_rxdata_manual(struct i2c_adapter *adapter, uint16_t saddr,
+	unsigned char *rxdata, int data_length);
+//                                                                  
+int32_t msm_camera_i2c_txdata_manual(struct i2c_adapter *adapter, unsigned short saddr,
+	unsigned char *txdata, int length);
+//                                                                 
+#endif
+
 #endif

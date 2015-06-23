@@ -35,7 +35,6 @@
 #include <linux/syscalls.h>
 #include <linux/hrtimer.h>
 #include <linux/ion.h>
-
 #include <mach/cpuidle.h>
 DEFINE_MUTEX(ctrl_cmd_lock);
 
@@ -2905,7 +2904,11 @@ static long msm_ioctl_config(struct file *filep, unsigned int cmd,
 			ERR_COPY_FROM_USER();
 			rc = -EFAULT;
 		} else
+		#ifdef CONFIG_LGE_FLASH_LM3559 //                  
+			rc = lge_flash_ctrl(pmsm->sync->sdata, &flash_info);
+		#else
 			rc = msm_flash_ctrl(pmsm->sync->sdata, &flash_info);
+		#endif
 
 		break;
 	}
@@ -3962,7 +3965,7 @@ static int msm_sync_init(struct msm_sync *sync,
 	msm_queue_init(&sync->vpe_q, "vpe");
 
 	pm_qos_add_request(&sync->idle_pm_qos, PM_QOS_CPU_DMA_LATENCY,
-					   PM_QOS_DEFAULT_VALUE);
+		PM_QOS_DEFAULT_VALUE);
 
 	rc = msm_camio_probe_on(pdev);
 	if (rc < 0) {

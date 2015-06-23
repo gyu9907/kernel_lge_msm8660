@@ -26,7 +26,6 @@
 #else
 #include <linux/time.h>
 #endif
-
 #include <linux/ion.h>
 
 #define BIT(nr)   (1UL << (nr))
@@ -195,24 +194,6 @@
 #define MSM_CAM_IOCTL_ISPIF_IO_CFG \
 	_IOR(MSM_CAM_IOCTL_MAGIC, 54, struct ispif_cfg_data *)
 
-#define MSM_CAM_IOCTL_STATS_REQBUF \
-	_IOR(MSM_CAM_IOCTL_MAGIC, 55, struct msm_stats_reqbuf *)
-
-#define MSM_CAM_IOCTL_STATS_ENQUEUEBUF \
-	_IOR(MSM_CAM_IOCTL_MAGIC, 56, struct msm_stats_buf_info *)
-
-#define MSM_CAM_IOCTL_STATS_FLUSH_BUFQ \
-	_IOR(MSM_CAM_IOCTL_MAGIC, 57, struct msm_stats_flush_bufq *)
-
-struct msm_stats_reqbuf {
-	int num_buf;		/* how many buffers requested */
-	int stats_type;	/* stats type */
-};
-
-struct msm_stats_flush_bufq {
-	int stats_type;	/* enum msm_stats_enum_type */
-};
-
 struct msm_mctl_pp_cmd {
 	int32_t  id;
 	uint16_t length;
@@ -229,6 +210,9 @@ struct msm_mctl_post_proc_cmd {
 #define MSM_CAMERA_LED_HIGH 2
 #define MSM_CAMERA_LED_INIT 3
 #define MSM_CAMERA_LED_RELEASE 4
+//                                                                                
+#define MSM_CAMERA_LED_MOVIE 5
+//                                                                               
 
 #define MSM_CAMERA_STROBE_FLASH_NONE 0
 #define MSM_CAMERA_STROBE_FLASH_XENON 1
@@ -473,9 +457,6 @@ struct msm_camera_cfg_cmd {
 #define CMD_AXI_CFG_TERT1              BIT(12)
 #define CMD_AXI_CFG_TERT2              BIT(13)
 
-#define CMD_AXI_START  0xE1
-#define CMD_AXI_STOP   0xE2
-
 /* vfe config command: config command(from config thread)*/
 struct msm_vfe_cfg_cmd {
 	int cmd_type;
@@ -532,36 +513,6 @@ struct camera_enable_cmd {
 #define FRAME_THUMBNAIL			3
 #define FRAME_RAW_SNAPSHOT		4
 #define FRAME_MAX			5
-
-enum msm_stats_enum_type {
-	MSM_STATS_TYPE_AEC, /* legacy based AEC */
-	MSM_STATS_TYPE_AF,  /* legacy based AF */
-	MSM_STATS_TYPE_AWB, /* legacy based AWB */
-	MSM_STATS_TYPE_RS,  /* legacy based RS */
-	MSM_STATS_TYPE_CS,  /* legacy based CS */
-	MSM_STATS_TYPE_IHIST,   /* legacy based HIST */
-	MSM_STATS_TYPE_SKIN,    /* legacy based SKIN */
-	MSM_STATS_TYPE_BG,  /* Bayer Grids */
-	MSM_STATS_TYPE_BF,  /* Bayer Focus */
-	MSM_STATS_TYPE_BHIST,   /* Bayer Hist */
-	MSM_STATS_TYPE_AE_AW,   /* legacy stats for vfe 2.x*/
-	MSM_STATS_TYPE_MAX  /* MAX */
-};
-
-struct msm_stats_buf_info {
-	int type; /* msm_stats_enum_type */
-	int fd;
-	void *vaddr;
-	uint32_t offset;
-	uint32_t len;
-	uint32_t y_off;
-	uint32_t cbcr_off;
-	uint32_t planar0_off;
-	uint32_t planar1_off;
-	uint32_t planar2_off;
-	uint8_t active;
-	int buf_idx;
-};
 
 struct msm_pmem_info {
 	int type;
@@ -726,7 +677,6 @@ struct msm_stats_buf {
 	int length;
 	struct ion_handle *handle;
 	uint32_t frame_id;
-	int buf_idx;
 };
 #define MSM_V4L2_EXT_CAPTURE_MODE_DEFAULT 0
 /* video capture mode in VIDIOC_S_PARM */
@@ -869,7 +819,30 @@ struct msm_snapshot_pp_status {
 #define CFG_START_STREAM              44
 #define CFG_STOP_STREAM               45
 #define CFG_GET_CSI_PARAMS            46
-#define CFG_MAX			47
+
+//                                                
+#define SENSOR_AE_METERING			  47
+enum AE_metering {
+	AE_METERING_DEFAULT,
+	AE_METERING_CENTER,
+	AE_METERING_MAX
+};
+//                                                
+//                                                              
+#define CFG_FIXED_FPS				  48
+#define CFG_VT_AWB_LOCK				  49  //                                                                              
+#define CFG_VT_AEC_LOCK				  50  //                                                                              
+
+#define SENSOR_AUTO_FPS_1030	0 //CAMERA_BESTSHOT_OFF
+#define SENSOR_FIXED_FPS_15		1
+#define SENSOR_FIXED_FPS_30		2
+#define SENSOR_FIXED_FPS_10		3
+#define SENSOR_FIXED_FPS_08		4
+#define SENSOR_AUTO_FPS_0730	5 //CAMERA_BESTSHOT_NIGHT
+#define SENSOR_FIXED_FPS_07		6
+//                                                              
+
+#define CFG_MAX						  51	//47
 
 
 #define MOVE_NEAR	0
@@ -882,10 +855,27 @@ struct msm_snapshot_pp_status {
 #define SENSOR_HFR_90FPS_MODE 4
 #define SENSOR_HFR_120FPS_MODE 5
 
+//                                                                                
+#define SENSOR_VT_AWB_UNLOCK	0
+#define SENSOR_VT_AWB_LOCK		1
+#define SENSOR_VT_AEC_UNLOCK	0
+#define SENSOR_VT_AEC_LOCK		1
+//                                                                                
+
+#if 0 /*                                         */
 #define SENSOR_QTR_SIZE			0
 #define SENSOR_FULL_SIZE		1
 #define SENSOR_QVGA_SIZE		2
 #define SENSOR_INVALID_SIZE		3
+#else
+#define SENSOR_QTR_SIZE			0
+#define SENSOR_FULL_SIZE		1
+//                                                              
+#define SENSOR_1080_SIZE		2
+//                                                            
+#define SENSOR_QVGA_SIZE		3
+#define SENSOR_INVALID_SIZE		4
+#endif
 
 #define CAMERA_EFFECT_OFF		0
 #define CAMERA_EFFECT_MONO		1
@@ -1099,6 +1089,14 @@ struct fps_cfg {
 	uint16_t fps_div;
 	uint32_t pict_fps_div;
 };
+
+//                                      
+// for YUV sensor[JB]
+struct fps_minmax_cfg {
+	uint8_t minfps;
+	uint8_t maxfps;
+};
+//                                      
 struct wb_info_cfg {
 	uint16_t red_gain;
 	uint16_t green_gain;
@@ -1143,15 +1141,17 @@ struct sensor_init_cfg {
 	uint8_t pict_res;
 };
 
+//Start :randy@qualcomm.com for calibration 2012.04.15
 #define ROLLOFF_CALDATA_SIZE    (17 * 13)
 typedef struct
 {
-    unsigned short          mesh_rolloff_table_size;     // TableSize
-    uint8_t                 r_gain[ROLLOFF_CALDATA_SIZE];   // RGain
-    uint8_t                 gr_gain[ROLLOFF_CALDATA_SIZE];  // GRGain
-    uint8_t                 gb_gain[ROLLOFF_CALDATA_SIZE];  // GBGain
-    uint8_t                 b_gain[ROLLOFF_CALDATA_SIZE];   // BGain
-    uint8_t                 red_ref[17];
+    unsigned short           mesh_rolloff_table_size;     // TableSize
+    uint8_t                  r_gain[ROLLOFF_CALDATA_SIZE];   // RGain
+    uint8_t                  gr_gain[ROLLOFF_CALDATA_SIZE];  // GRGain
+    uint8_t                  gb_gain[ROLLOFF_CALDATA_SIZE];  // GBGain
+    uint8_t                  b_gain[ROLLOFF_CALDATA_SIZE];   // BGain
+	uint8_t					 red_ref[17];
+
 } rolloff_caldata_array_type;
 
 struct sensor_calib_data {
@@ -1166,9 +1166,11 @@ struct sensor_calib_data {
 	uint16_t stroke_amt;
 	uint16_t af_pos_1m;
 	uint16_t af_pos_inf;
+
 	/* Lens Shading Calibration Data */
 	rolloff_caldata_array_type rolloff;
 };
+//End :randy@qualcomm.com for calibration 2012.04.15
 
 enum msm_sensor_resolution_t {
 	MSM_SENSOR_RES_FULL,
@@ -1357,6 +1359,10 @@ struct sensor_cfg_data {
 		struct cord aec_cord;
 		int is_autoflash;
 		struct mirror_flip mirror_flip;
+//                                      
+// for YUV sensor[JB]
+		struct fps_minmax_cfg fps_range;
+//                                      
 	} cfg;
 };
 
@@ -1644,177 +1650,25 @@ struct img_plane_info {
 #define QCAMERA_VNODE_GROUP_ID 2
 
 #define MSM_CAM_V4L2_IOCTL_GET_CAMERA_INFO \
-	_IOWR('V', BASE_VIDIOC_PRIVATE + 1, struct msm_camera_v4l2_ioctl_t)
+	_IOWR('V', BASE_VIDIOC_PRIVATE + 1, struct msm_camera_v4l2_ioctl_t *)
 
 #define MSM_CAM_V4L2_IOCTL_GET_CONFIG_INFO \
-	_IOWR('V', BASE_VIDIOC_PRIVATE + 2, struct msm_camera_v4l2_ioctl_t)
+	_IOWR('V', BASE_VIDIOC_PRIVATE + 2, struct msm_camera_v4l2_ioctl_t *)
 
 #define MSM_CAM_V4L2_IOCTL_GET_MCTL_INFO \
-	_IOWR('V', BASE_VIDIOC_PRIVATE + 3, struct msm_camera_v4l2_ioctl_t)
+	_IOWR('V', BASE_VIDIOC_PRIVATE + 3, struct msm_camera_v4l2_ioctl_t *)
 
 #define MSM_CAM_V4L2_IOCTL_CTRL_CMD_DONE \
-	_IOWR('V', BASE_VIDIOC_PRIVATE + 4, struct msm_camera_v4l2_ioctl_t)
+	_IOWR('V', BASE_VIDIOC_PRIVATE + 4, struct msm_camera_v4l2_ioctl_t *)
 
 #define MSM_CAM_V4L2_IOCTL_GET_EVENT_PAYLOAD \
-	_IOWR('V', BASE_VIDIOC_PRIVATE + 5, struct msm_camera_v4l2_ioctl_t)
+	_IOWR('V', BASE_VIDIOC_PRIVATE + 5, struct msm_camera_v4l2_ioctl_t *)
 
 #define MSM_CAM_IOCTL_SEND_EVENT \
 	_IOWR('V', BASE_VIDIOC_PRIVATE + 6, struct v4l2_event)
 
-#define MSM_CAM_V4L2_IOCTL_CFG_VPE \
-	_IOWR('V', BASE_VIDIOC_PRIVATE + 7, struct msm_vpe_cfg_cmd)
-
-#define MSM_CAM_V4L2_IOCTL_PRIVATE_S_CTRL \
-	_IOWR('V', BASE_VIDIOC_PRIVATE + 8, struct msm_camera_v4l2_ioctl_t)
-
 struct msm_camera_v4l2_ioctl_t {
-	uint32_t id;
 	void __user *ioctl_ptr;
-	uint32_t len;
 };
-
-enum msm_camss_irq_idx {
-	CAMERA_SS_IRQ_0,
-	CAMERA_SS_IRQ_1,
-	CAMERA_SS_IRQ_2,
-	CAMERA_SS_IRQ_3,
-	CAMERA_SS_IRQ_4,
-	CAMERA_SS_IRQ_5,
-	CAMERA_SS_IRQ_6,
-	CAMERA_SS_IRQ_7,
-	CAMERA_SS_IRQ_8,
-	CAMERA_SS_IRQ_9,
-	CAMERA_SS_IRQ_10,
-	CAMERA_SS_IRQ_11,
-	CAMERA_SS_IRQ_12,
-	CAMERA_SS_IRQ_MAX
-};
-
-enum msm_cam_hw_idx {
-	MSM_CAM_HW_MICRO,
-	MSM_CAM_HW_CCI,
-	MSM_CAM_HW_CSI0,
-	MSM_CAM_HW_CSI1,
-	MSM_CAM_HW_CSI2,
-	MSM_CAM_HW_CSI3,
-	MSM_CAM_HW_ISPIF,
-	MSM_CAM_HW_CPP,
-	MSM_CAM_HW_VFE0,
-	MSM_CAM_HW_VFE1,
-	MSM_CAM_HW_JPEG0,
-	MSM_CAM_HW_JPEG1,
-	MSM_CAM_HW_JPEG2,
-	MSM_CAM_HW_MAX
-};
-
-struct msm_camera_irq_cfg {
-	/* Bit mask of all the camera hardwares that needs to
-	 * be composited into a single IRQ to the MSM.
-	 * Current usage: (may be updated based on hw changes)
-	 * Bits 31:13 - Reserved.
-	 * Bits 12:0
-	 * 12 - MSM_CAM_HW_JPEG2
-	 * 11 - MSM_CAM_HW_JPEG1
-	 * 10 - MSM_CAM_HW_JPEG0
-	 *  9 - MSM_CAM_HW_VFE1
-	 *  8 - MSM_CAM_HW_VFE0
-	 *  7 - MSM_CAM_HW_CPP
-	 *  6 - MSM_CAM_HW_ISPIF
-	 *  5 - MSM_CAM_HW_CSI3
-	 *  4 - MSM_CAM_HW_CSI2
-	 *  3 - MSM_CAM_HW_CSI1
-	 *  2 - MSM_CAM_HW_CSI0
-	 *  1 - MSM_CAM_HW_CCI
-	 *  0 - MSM_CAM_HW_MICRO
-	 */
-	uint32_t cam_hw_mask;
-	uint8_t  irq_idx;
-	uint8_t  num_hwcore;
-};
-
-#define MSM_IRQROUTER_CFG_COMPIRQ \
-	_IOWR('V', BASE_VIDIOC_PRIVATE, void __user *)
-
-#define MAX_NUM_CPP_STRIPS 8
-
-enum msm_cpp_frame_type {
-	MSM_CPP_OFFLINE_FRAME,
-	MSM_CPP_REALTIME_FRAME,
-};
-
-struct msm_cpp_frame_strip_info {
-	int scale_v_en;
-	int scale_h_en;
-
-	int upscale_v_en;
-	int upscale_h_en;
-
-	int src_start_x;
-	int src_end_x;
-	int src_start_y;
-	int src_end_y;
-
-	/* Padding is required for upscaler because it does not
-	 * pad internally like other blocks, also needed for rotation
-	 * rotation expects all the blocks in the stripe to be the same size
-	 * Padding is done such that all the extra padded pixels
-	 * are on the right and bottom
-	*/
-	int pad_bottom;
-	int pad_top;
-	int pad_right;
-	int pad_left;
-
-	int v_init_phase;
-	int h_init_phase;
-	int h_phase_step;
-	int v_phase_step;
-
-	int prescale_crop_width_first_pixel;
-	int prescale_crop_width_last_pixel;
-	int prescale_crop_height_first_line;
-	int prescale_crop_height_last_line;
-
-	int postscale_crop_height_first_line;
-	int postscale_crop_height_last_line;
-	int postscale_crop_width_first_pixel;
-	int postscale_crop_width_last_pixel;
-
-	int dst_start_x;
-	int dst_end_x;
-	int dst_start_y;
-	int dst_end_y;
-
-	int bytes_per_pixel;
-	unsigned int source_address;
-	unsigned int destination_address;
-	unsigned int src_stride;
-	unsigned int dst_stride;
-	int rotate_270;
-	int horizontal_flip;
-	int vertical_flip;
-	int scale_output_width;
-	int scale_output_height;
-};
-
-struct msm_cpp_frame_info_t {
-	int32_t frame_id;
-	uint32_t inst_id;
-	uint32_t client_id;
-	enum msm_cpp_frame_type frame_type;
-	uint32_t num_strips;
-	struct msm_cpp_frame_strip_info *strip_info;
-};
-
-#define VIDIOC_MSM_CPP_CFG \
-	_IOWR('V', BASE_VIDIOC_PRIVATE, struct msm_camera_v4l2_ioctl_t)
-
-#define VIDIOC_MSM_CPP_GET_EVENTPAYLOAD \
-	_IOWR('V', BASE_VIDIOC_PRIVATE + 1, struct msm_camera_v4l2_ioctl_t)
-
-#define VIDIOC_MSM_CPP_GET_INST_INFO \
-	_IOWR('V', BASE_VIDIOC_PRIVATE + 2, struct msm_camera_v4l2_ioctl_t)
-
-#define V4L2_EVENT_CPP_FRAME_DONE  (V4L2_EVENT_PRIVATE_START + 0)
 
 #endif /* __LINUX_MSM_CAMERA_H */

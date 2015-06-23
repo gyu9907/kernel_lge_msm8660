@@ -13,6 +13,7 @@
 #ifndef MSM_SENSOR_H
 #define MSM_SENSOR_H
 
+#include <linux/module.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/i2c.h>
@@ -135,8 +136,6 @@ struct msm_sensor_fn_t {
 		(struct msm_sensor_ctrl_t *);
 	int (*sensor_power_up) (struct msm_sensor_ctrl_t *);
 	int32_t (*sensor_match_id)(struct msm_sensor_ctrl_t *s_ctrl);
-	int (*sensor_get_eeprom_data) (struct msm_sensor_ctrl_t *,
-		struct sensor_cfg_data *);
 	int (*sensor_adjust_frame_lines)
 		(struct msm_sensor_ctrl_t *s_ctrl, uint16_t res);
 	int32_t (*sensor_get_csi_params)(struct msm_sensor_ctrl_t *,
@@ -238,10 +237,7 @@ int msm_sensor_write_res_settings
 int32_t msm_sensor_write_output_settings(struct msm_sensor_ctrl_t *s_ctrl,
 	uint16_t res);
 
-int32_t msm_sensor_adjust_frame_lines1(struct msm_sensor_ctrl_t *s_ctrl,
-	uint16_t res);
-
-int32_t msm_sensor_adjust_frame_lines2(struct msm_sensor_ctrl_t *s_ctrl,
+int32_t msm_sensor_adjust_frame_lines(struct msm_sensor_ctrl_t *s_ctrl,
 	uint16_t res);
 
 int32_t msm_sensor_setting(struct msm_sensor_ctrl_t *s_ctrl,
@@ -257,15 +253,15 @@ long msm_sensor_subdev_ioctl(struct v4l2_subdev *sd,
 
 int32_t msm_sensor_get_csi_params(struct msm_sensor_ctrl_t *s_ctrl,
 		struct csi_lane_params_t *sensor_output_info);
+#if defined(CONFIG_LGE_CAMERA) && defined(CONFIG_LGE_SENSOR_MT9M114) && defined(CONFIG_MSM_CAMERA_V4L2)
+int32_t msm_sensor_setting_114(struct msm_sensor_ctrl_t *s_ctrl,
+			int update_type, int res);
 
-#ifdef CONFIG_MSM_CAMERA_SENSOR
-struct msm_sensor_ctrl_t *get_sctrl(struct v4l2_subdev *sd);
-#else
-static inline struct msm_sensor_ctrl_t *get_sctrl(struct v4l2_subdev *sd)
-{
-	return NULL;
-}
+int32_t msm_sensor_write_init_settings_114(struct msm_sensor_ctrl_t *s_ctrl);
+
+void msm_sensor_start_stream_114(struct msm_sensor_ctrl_t *s_ctrl);
 #endif
+struct msm_sensor_ctrl_t *get_sctrl(struct v4l2_subdev *sd);
 
 #define VIDIOC_MSM_SENSOR_CFG \
 	_IOWR('V', BASE_VIDIOC_PRIVATE + 10, void __user *)

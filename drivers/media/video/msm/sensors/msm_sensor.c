@@ -16,7 +16,7 @@
 #include "msm_camera_i2c_mux.h"
 
 /*=============================================================*/
-int32_t msm_sensor_adjust_frame_lines1(struct msm_sensor_ctrl_t *s_ctrl,
+int32_t msm_sensor_adjust_frame_lines(struct msm_sensor_ctrl_t *s_ctrl,
 	uint16_t res)
 {
 	uint16_t cur_line = 0;
@@ -43,45 +43,6 @@ int32_t msm_sensor_adjust_frame_lines1(struct msm_sensor_ctrl_t *s_ctrl,
 				exp_fl_lines,
 				MSM_CAMERA_I2C_WORD_DATA);
 		CDBG("%s cur_fl_lines %d, exp_fl_lines %d\n", __func__,
-			s_ctrl->msm_sensor_reg->
-			output_settings[res].frame_length_lines,
-			exp_fl_lines);
-	}
-	return 0;
-}
-
-int32_t msm_sensor_adjust_frame_lines2(struct msm_sensor_ctrl_t *s_ctrl,
-	uint16_t res)
-{
-	uint16_t cur_line = 0;
-	uint16_t exp_fl_lines = 0;
-	uint8_t int_time[3];
-	if (s_ctrl->sensor_exp_gain_info) {
-		if (s_ctrl->prev_gain && s_ctrl->prev_line &&
-			s_ctrl->func_tbl->sensor_write_exp_gain)
-			s_ctrl->func_tbl->sensor_write_exp_gain(
-				s_ctrl,
-				s_ctrl->prev_gain,
-				s_ctrl->prev_line);
-
-		msm_camera_i2c_read_seq(s_ctrl->sensor_i2c_client,
-			s_ctrl->sensor_exp_gain_info->coarse_int_time_addr-1,
-			&int_time[0], 3);
-		cur_line |= int_time[0] << 12;
-		cur_line |= int_time[1] << 4;
-		cur_line |= int_time[2] >> 4;
-		exp_fl_lines = cur_line +
-			s_ctrl->sensor_exp_gain_info->vert_offset;
-		if (exp_fl_lines > s_ctrl->msm_sensor_reg->
-			output_settings[res].frame_length_lines)
-			msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
-				s_ctrl->sensor_output_reg_addr->
-				frame_length_lines,
-				exp_fl_lines,
-				MSM_CAMERA_I2C_WORD_DATA);
-		CDBG("%s cur_line %x cur_fl_lines %x, exp_fl_lines %x\n",
-			__func__,
-			cur_line,
 			s_ctrl->msm_sensor_reg->
 			output_settings[res].frame_length_lines,
 			exp_fl_lines);
@@ -198,6 +159,13 @@ int32_t msm_sensor_write_exp_gain1(struct msm_sensor_ctrl_t *s_ctrl,
 	if (line > (fl_lines - offset))
 		fl_lines = line + offset;
 
+//                                                                               
+#ifdef CONFIG_LGE_SENSOR_IMX105
+	if(gain == 0x0)
+		gain = 0x165b;
+#endif
+//                                                                             
+
 	s_ctrl->func_tbl->sensor_group_hold_on(s_ctrl);
 	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
 		s_ctrl->sensor_output_reg_addr->frame_length_lines, fl_lines,
@@ -247,7 +215,7 @@ int32_t msm_sensor_setting1(struct msm_sensor_ctrl_t *s_ctrl,
 	static int csi_config;
 
 	s_ctrl->func_tbl->sensor_stop_stream(s_ctrl);
-	msleep(30);
+	msleep(5); //                                                              
 	if (update_type == MSM_SENSOR_REG_INIT) {
 		CDBG("Register INIT\n");
 		s_ctrl->curr_csi_params = NULL;
@@ -259,7 +227,7 @@ int32_t msm_sensor_setting1(struct msm_sensor_ctrl_t *s_ctrl,
 		msm_sensor_write_conf_array(
 			s_ctrl->sensor_i2c_client,
 			s_ctrl->msm_sensor_reg->mode_settings, res);
-		msleep(30);
+		//                                                              
 		if (!csi_config) {
 			s_ctrl->curr_csic_params = s_ctrl->csic_params[res];
 			CDBG("CSI config in progress\n");
@@ -268,7 +236,7 @@ int32_t msm_sensor_setting1(struct msm_sensor_ctrl_t *s_ctrl,
 				s_ctrl->curr_csic_params);
 			CDBG("CSI config is done\n");
 			mb();
-			msleep(30);
+			msleep(10); //                                                              
 			csi_config = 1;
 		}
 		v4l2_subdev_notify(&s_ctrl->sensor_v4l2_subdev,
@@ -276,7 +244,7 @@ int32_t msm_sensor_setting1(struct msm_sensor_ctrl_t *s_ctrl,
 			&s_ctrl->sensordata->pdata->ioclk.vfe_clk_rate);
 
 		s_ctrl->func_tbl->sensor_start_stream(s_ctrl);
-		msleep(50);
+		//                                                              
 	}
 	return rc;
 }
@@ -284,39 +252,46 @@ int32_t msm_sensor_setting(struct msm_sensor_ctrl_t *s_ctrl,
 			int update_type, int res)
 {
 	int32_t rc = 0;
+	static int csi_config;
+	
 
 	s_ctrl->func_tbl->sensor_stop_stream(s_ctrl);
-	msleep(30);
+	msleep(5);	
+
 	if (update_type == MSM_SENSOR_REG_INIT) {
 		s_ctrl->curr_csi_params = NULL;
 		msm_sensor_enable_debugfs(s_ctrl);
+		s_ctrl->func_tbl->sensor_group_hold_on(s_ctrl);		
 		msm_sensor_write_init_settings(s_ctrl);
+		s_ctrl->func_tbl->sensor_group_hold_off(s_ctrl);	
+		csi_config = 0;
+		
+		msleep(5);		
 	} else if (update_type == MSM_SENSOR_UPDATE_PERIODIC) {
-		msm_sensor_write_res_settings(s_ctrl, res);
-		if (s_ctrl->curr_csi_params != s_ctrl->csi_params[res]) {
-			s_ctrl->curr_csi_params = s_ctrl->csi_params[res];
-			s_ctrl->curr_csi_params->csid_params.lane_assign =
-				s_ctrl->sensordata->sensor_platform_info->
-				csi_lane_params->csi_lane_assign;
-			s_ctrl->curr_csi_params->csiphy_params.lane_mask =
-				s_ctrl->sensordata->sensor_platform_info->
-				csi_lane_params->csi_lane_mask;
+			if (!csi_config) {
+				s_ctrl->curr_csic_params = s_ctrl->csic_params[res];
+				pr_err("CSI config in progress\n");
+				v4l2_subdev_notify(&s_ctrl->sensor_v4l2_subdev,
+					NOTIFY_CSIC_CFG,
+					s_ctrl->curr_csic_params);
+				pr_err("CSI config is done\n");
+				mb();
+				msleep(30);
+				csi_config = 1;
+			}
 			v4l2_subdev_notify(&s_ctrl->sensor_v4l2_subdev,
-				NOTIFY_CSID_CFG,
-				&s_ctrl->curr_csi_params->csid_params);
-			mb();
-			v4l2_subdev_notify(&s_ctrl->sensor_v4l2_subdev,
-				NOTIFY_CSIPHY_CFG,
-				&s_ctrl->curr_csi_params->csiphy_params);
-			mb();
-			msleep(20);
-		}
+				NOTIFY_PCLK_CHANGE,
+				&s_ctrl->sensordata->pdata->ioclk.vfe_clk_rate);
 
-		v4l2_subdev_notify(&s_ctrl->sensor_v4l2_subdev,
-			NOTIFY_PCLK_CHANGE, &s_ctrl->msm_sensor_reg->
-			output_settings[res].op_pixel_clk);
+		s_ctrl->func_tbl->sensor_group_hold_on(s_ctrl);		
+		msm_sensor_write_conf_array(
+			s_ctrl->sensor_i2c_client,
+			s_ctrl->msm_sensor_reg->mode_settings, res);
+		s_ctrl->func_tbl->sensor_group_hold_off(s_ctrl);
+	
 		s_ctrl->func_tbl->sensor_start_stream(s_ctrl);
-		msleep(30);
+		
+		msleep(10);
 	}
 	return rc;
 }
@@ -390,7 +365,7 @@ int32_t msm_sensor_release(struct msm_sensor_ctrl_t *s_ctrl)
 {
 	long fps = 0;
 	uint32_t delay = 0;
-	CDBG("%s called\n", __func__);
+	printk("%s called\n", __func__); /*                                                                   */
 	s_ctrl->func_tbl->sensor_stop_stream(s_ctrl);
 	if (s_ctrl->curr_res != MSM_SENSOR_INVALID_RES) {
 		fps = s_ctrl->msm_sensor_reg->
@@ -437,6 +412,16 @@ int32_t msm_sensor_get_csi_params(struct msm_sensor_ctrl_t *s_ctrl,
 	sensor_output_info->csid_core = s_ctrl->sensordata->
 			pdata[0].csid_core;
 	sensor_output_info->csid_version = s_ctrl->csid_version;
+
+	//                                                                     
+			printk("%s : csi_lane_assign = 0x%x, csi_lane_mask = 0x%x,csi_if = 0x%x, csid_core = 0x%x, csid_version = = 0x%x\n", __func__,
+			s_ctrl->sensordata->sensor_platform_info->csi_lane_params->csi_lane_assign,
+			s_ctrl->sensordata->sensor_platform_info->csi_lane_params->csi_lane_mask,
+			s_ctrl->sensordata->csi_if,
+			s_ctrl->sensordata->pdata[0].csid_core,
+			s_ctrl->csid_version);
+	//                                                                     
+
 	return 0;
 }
 
@@ -449,7 +434,7 @@ int32_t msm_sensor_config(struct msm_sensor_ctrl_t *s_ctrl, void __user *argp)
 		sizeof(struct sensor_cfg_data)))
 		return -EFAULT;
 	mutex_lock(s_ctrl->msm_sensor_mutex);
-	CDBG("msm_sensor_config: cfgtype = %d\n",
+	printk("msm_sensor_config: cfgtype = %d\n", /*                                                                   */
 	cdata.cfgtype);
 		switch (cdata.cfgtype) {
 		case CFG_SET_FPS:
@@ -611,6 +596,21 @@ int32_t msm_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl)
 	int32_t rc = 0;
 	struct msm_camera_sensor_info *data = s_ctrl->sensordata;
 	CDBG("%s: %d\n", __func__, __LINE__);
+
+//                                                                  
+#ifdef CONFIG_LGE_SENSOR_IMX105
+/*
+	if (data->sensor_platform_info->ext_power_ctrl != NULL) 
+		data->sensor_platform_info->ext_power_ctrl(0); 
+*/
+#else
+	if (data->sensor_platform_info->ext_power_ctrl != NULL) // mo2jonghoo.lee 2013.02.01
+		data->sensor_platform_info->ext_power_ctrl(1); // mo2jonghoo.lee 2013.02.01
+#endif
+//                                                                 
+
+		pr_err("%s: E: %s\n", __func__, data->sensor_name); /*                                                                 */
+
 	s_ctrl->reg_ptr = kzalloc(sizeof(struct regulator *)
 			* data->sensor_platform_info->num_vreg, GFP_KERNEL);
 	if (!s_ctrl->reg_ptr) {
@@ -652,6 +652,21 @@ int32_t msm_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl)
 	if (s_ctrl->clk_rate != 0)
 		cam_clk_info->clk_rate = s_ctrl->clk_rate;
 
+#ifdef CONFIG_LGE_SENSOR_IMX105		
+	if (data->sensor_platform_info->ext_power_ctrl != NULL)
+		data->sensor_platform_info->ext_power_ctrl(1);
+	pr_err("[JJONG]%s: RESET enable\n", __func__);
+
+	usleep_range(1000, 2000);
+
+	rc = msm_cam_clk_enable(&s_ctrl->sensor_i2c_client->client->dev,
+		cam_clk_info, &s_ctrl->cam_clk, ARRAY_SIZE(cam_clk_info), 1);
+	pr_err("[JJONG]%s: Mclk enable\n", __func__);
+	if (rc < 0) {
+		pr_err("%s: clk enable failed\n", __func__);
+		goto enable_clk_failed;
+	}
+#else		// for Batman and Cayman
 	rc = msm_cam_clk_enable(&s_ctrl->sensor_i2c_client->client->dev,
 		cam_clk_info, &s_ctrl->cam_clk, ARRAY_SIZE(cam_clk_info), 1);
 	if (rc < 0) {
@@ -660,12 +675,20 @@ int32_t msm_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl)
 	}
 
 	usleep_range(1000, 2000);
+
+	if (data->sensor_platform_info->ext_power_ctrl != NULL) // mo2jonghoo.lee 2013.02.01
+			data->sensor_platform_info->ext_power_ctrl(0); // mo2jonghoo.lee 2013.02.01
+			
+	mdelay(1); // mo2jonghoo.lee 2013.02.01
 	if (data->sensor_platform_info->ext_power_ctrl != NULL)
 		data->sensor_platform_info->ext_power_ctrl(1);
+#endif
 
 	if (data->sensor_platform_info->i2c_conf &&
 		data->sensor_platform_info->i2c_conf->use_i2c_mux)
 		msm_sensor_enable_i2c_mux(data->sensor_platform_info->i2c_conf);
+
+	pr_err("%s: X\n", __func__); /*                                                                 */
 
 	return rc;
 
@@ -693,6 +716,7 @@ int32_t msm_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 {
 	struct msm_camera_sensor_info *data = s_ctrl->sensordata;
 	CDBG("%s\n", __func__);
+	pr_err("%s: E: %s\n", __func__, data->sensor_name); /*                                                                 */
 	if (data->sensor_platform_info->i2c_conf &&
 		data->sensor_platform_info->i2c_conf->use_i2c_mux)
 		msm_sensor_disable_i2c_mux(
@@ -713,6 +737,7 @@ int32_t msm_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 		s_ctrl->reg_ptr, 0);
 	msm_camera_request_gpio_table(data, 0);
 	kfree(s_ctrl->reg_ptr);
+	pr_err("%s: X\n", __func__); /*                                                                 */
 	return 0;
 }
 
@@ -748,7 +773,7 @@ int32_t msm_sensor_i2c_probe(struct i2c_client *client,
 {
 	int rc = 0;
 	struct msm_sensor_ctrl_t *s_ctrl;
-	CDBG("%s %s_i2c_probe called\n", __func__, client->name);
+	printk("%s_i2c_probe called\n", client->name); /*                                                                   */
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		pr_err("%s %s i2c_check_functionality failed\n",
 			__func__, client->name);
@@ -960,3 +985,64 @@ int msm_sensor_enable_debugfs(struct msm_sensor_ctrl_t *s_ctrl)
 
 	return 0;
 }
+#if defined(CONFIG_LGE_CAMERA) && defined(CONFIG_LGE_SENSOR_MT9M114) && defined(CONFIG_MSM_CAMERA_V4L2)
+int32_t msm_sensor_setting_114(struct msm_sensor_ctrl_t *s_ctrl,
+			int update_type, int res)
+{
+	int32_t rc = 0;
+	static int csi_config;
+ printk("### %s\n", __func__);
+	s_ctrl->func_tbl->sensor_stop_stream(s_ctrl);
+	msleep(30);
+	if (update_type == MSM_SENSOR_REG_INIT) {
+		printk("Register INIT\n");
+		s_ctrl->curr_csi_params = NULL;
+		msm_sensor_enable_debugfs(s_ctrl);
+		msm_sensor_write_init_settings_114(s_ctrl);
+		csi_config = 0;
+	} else if (update_type == MSM_SENSOR_UPDATE_PERIODIC) {
+		printk("PERIODIC : %d\n", res);
+		msm_sensor_write_conf_array_114(
+			s_ctrl->sensor_i2c_client,
+			s_ctrl->msm_sensor_reg->mode_settings, res);
+		msleep(30);
+		if (!csi_config) {
+			s_ctrl->curr_csic_params = s_ctrl->csic_params[res];
+			CDBG("CSI config in progress\n");
+			v4l2_subdev_notify(&s_ctrl->sensor_v4l2_subdev,
+				NOTIFY_CSIC_CFG,
+				s_ctrl->curr_csic_params);
+			CDBG("CSI config is done\n");
+			mb();
+			msleep(30);
+			csi_config = 1;
+		}
+		v4l2_subdev_notify(&s_ctrl->sensor_v4l2_subdev,
+			NOTIFY_PCLK_CHANGE,
+			&s_ctrl->sensordata->pdata->ioclk.vfe_clk_rate);
+		printk("### %s sensor_start_stream\n",__func__);
+		s_ctrl->func_tbl->sensor_start_stream(s_ctrl);
+		msleep(50);
+	}
+	return rc;
+}
+
+int32_t msm_sensor_write_init_settings_114(struct msm_sensor_ctrl_t *s_ctrl)
+{
+	int32_t rc;
+	rc = msm_sensor_write_all_conf_array_114(
+		s_ctrl->sensor_i2c_client,
+		s_ctrl->msm_sensor_reg->init_settings,
+		s_ctrl->msm_sensor_reg->init_size);
+	return rc;
+}
+
+void msm_sensor_start_stream_114(struct msm_sensor_ctrl_t *s_ctrl)
+{
+	msm_camera_i2c_write_tbl_114(
+		s_ctrl->sensor_i2c_client,
+		s_ctrl->msm_sensor_reg->start_stream_conf,
+		s_ctrl->msm_sensor_reg->start_stream_conf_size,
+		s_ctrl->msm_sensor_reg->default_data_type);
+}
+#endif

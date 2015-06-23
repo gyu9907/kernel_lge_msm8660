@@ -56,6 +56,13 @@ struct msm_cam_expander_info {
 };
 
 struct msm_camera_device_platform_data {
+	/*                                        */
+	//                                                                                
+#ifdef CONFIG_LGE_CAMERA 
+	void (*camera_power_on) (void);
+	void (*camera_power_off)(void);
+#endif
+	//                                                                              
 	int (*camera_gpio_on) (void);
 	void (*camera_gpio_off)(void);
 	struct msm_camera_io_ext ioext;
@@ -313,6 +320,17 @@ struct msm_snd_endpoints {
 	unsigned num;
 };
 
+struct cad_endpoint {
+	int id;
+	const char *name;
+	uint32_t capability;
+};
+
+struct msm_cad_endpoints {
+	struct cad_endpoint *endpoints;
+	unsigned num;
+};
+
 #define MSM_MAX_DEC_CNT 14
 /* 7k target ADSP information */
 /* Bit 23:0, for codec identification like mp3, wav etc *
@@ -333,6 +351,7 @@ enum msm_adspdec_concurrency {
 	MSM_ADSP_CODEC_AMRWB = 11,
 	MSM_ADSP_CODEC_EVRC = 12,
 	MSM_ADSP_CODEC_WMAPRO = 13,
+	MSM_ADSP_CODEC_AC3 = 23,
 	MSM_ADSP_MODE_TUNNEL = 24,
 	MSM_ADSP_MODE_NONTUNNEL = 25,
 	MSM_ADSP_MODE_LP = 26,
@@ -390,23 +409,11 @@ struct msm_panel_common_pdata {
 	void (*panel_config_gpio)(int);
 	int (*vga_switch)(int select_vga);
 	int *gpio_num;
-	int mdp_core_clk_rate;
-	unsigned num_mdp_clk;
-	int *mdp_core_clk_table;
+	u32 mdp_max_clk;
 #ifdef CONFIG_MSM_BUS_SCALING
 	struct msm_bus_scale_pdata *mdp_bus_scale_table;
 #endif
 	int mdp_rev;
-	void *power_on_set_1;
-	void *power_on_set_2;
-	void *power_on_set_3;
-	ssize_t power_on_set_size_1;
-	ssize_t power_on_set_size_2;
-	ssize_t power_on_set_size_3;
-	void *power_off_set_1;
-	void *power_off_set_2;
-	ssize_t power_off_set_size_1;
-	ssize_t power_off_set_size_2;
 	u32 ov0_wb_size;  /* overlay0 writeback size */
 	u32 ov1_wb_size;  /* overlay1 writeback size */
 	u32 mem_hid;
@@ -485,6 +492,7 @@ struct msm_wfd_platform_data {
 struct msm_fb_platform_data {
 	int (*detect_client)(const char *name);
 	int mddi_prescan;
+	unsigned char ext_resolution;
 	int (*allow_set_offset)(void);
 	char prim_panel_name[PANEL_NAME_MAX_LEN];
 	char ext_panel_name[PANEL_NAME_MAX_LEN];

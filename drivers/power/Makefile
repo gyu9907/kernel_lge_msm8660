@@ -53,6 +53,16 @@ obj-$(CONFIG_BATTERY_QCIBAT)    += qci_battery.o
 obj-$(CONFIG_BATTERY_BQ27520)	+= bq27520_fuelgauger.o
 obj-$(CONFIG_BATTERY_BQ27541)	+= bq27541_fuelgauger.o
 obj-$(CONFIG_SMB137B_CHARGER)   += smb137b.o
+
+# added by mo2chunghan.lee@lge.com - 09/21/2012 ----------
+ifeq ($(CONFIG_BATMAN_VZW_POWER_BATT_CHARGER),y)
+obj-$(CONFIG_BATTERY_325) += b325_battery_vzw.o
+else
+obj-$(CONFIG_BATTERY_325) += b325_battery.o
+endif
+obj-$(CONFIG_BATTERY_325_ALARM) += b325_battery_alarm.o
+# --------------------------------------------------------
+
 obj-$(CONFIG_PM8XXX_CCADC)	+= pm8xxx-ccadc.o
 obj-$(CONFIG_PM8921_BMS)	+= pm8921-bms.o
 obj-$(CONFIG_PM8921_CHARGER)	+= pm8921-charger.o

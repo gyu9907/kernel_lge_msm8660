@@ -172,17 +172,20 @@ config BATTERY_DA9052
 	  Say Y here to enable support for batteries charger integrated into
 	  DA9052 PMIC.
 
+# by mo2chunghan.lee@lge.com, 09/21/2012
 config BATTERY_MAX17040
 	tristate "Maxim MAX17040 Fuel Gauge"
-	depends on I2C
+	depends on I2C 
 	help
 	  MAX17040 is fuel-gauge systems for lithium-ion (Li+) batteries
 	  in handheld and portable equipment. The MAX17040 is configured
 	  to operate with a single lithium cell
 
+# by mo2chunghan.lee@lge.com, 09/21/2012
 config BATTERY_MAX17042
 	tristate "Maxim MAX17042/8997/8966 Fuel Gauge"
-	depends on I2C
+#	depends on I2C
+	depends on I2C && MACH_LGE_325_BOARD_DCM
 	help
 	  MAX17042 is fuel-gauge systems for lithium-ion (Li+) batteries
 	  in handheld and portable equipment. The MAX17042 is configured
@@ -389,6 +392,36 @@ config BQ27520_TEST_ENABLE
 	help
 	  Say Y here to enable Test sysfs Interface for BQ27520 Drivers.
 
+# by mo2chunghan.lee@lge.com, 09/21/2012 ------
+config BATTERY_325
+	tristate "325 battery charger driver"
+	depends on I2C && MACH_LGE_325_BOARD
+	default n
+	help
+	  Say Y here to enable support for 325 battery charging with BQ24160 (I2C) chips.
+
+config BATTERY_325_DCM
+	tristate "325 battery & charger config for only DCM model"
+	depends on I2C && MACH_LGE_325_BOARD_DCM
+	default n
+	help
+	  Say Y here to enable support for 325 DCM model with BQ24160 (I2C) chips.
+
+config TEMP_VZW_CONFIG
+	bool "TEMP Config for batman Verizon - 325 battery charger driver"
+	default n
+	help
+	  Say Y here to enable support for 325 battery charging with BQ24160 (I2C) chips.
+
+config BATTERY_325_ALARM
+	tristate "325 Battery Alarm Device driver"
+	depends on BATTERY_325
+	help
+	  This option enables support for the battery alarm module on the
+	  325 Model.  This support allows for configuration of
+	  the alarm module as well as interrupt handling.
+# ---------------------------------------------
+
 config PM8921_CHARGER
 	tristate "PM8921 Charger driver"
 	depends on MFD_PM8921_CORE
@@ -434,10 +467,4 @@ config AB8500_BATTERY_THERM_ON_BATCTRL
 	help
 	  Say Y to enable battery temperature measurements using
 	  thermistor connected on BATCTRL ADC.
-
-config LGE_PM_BATTERY_ID_CHECKER
-	default n
-	bool "LGE battery id checker"
-	help
-	  LGE Battery Id Checker Configuration
 endif # POWER_SUPPLY

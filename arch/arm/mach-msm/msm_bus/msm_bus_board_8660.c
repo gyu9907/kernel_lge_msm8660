@@ -22,7 +22,7 @@
 #include "msm_bus_core.h"
 
 #define NMASTERS 39
-#define NSLAVES 68
+#define NSLAVES 69	/* original value(68) is changed into 69 to fix sysfs kernel panic */
 #define NFAB_8660 5
 
 enum msm_bus_fabric_tiered_slave_type {

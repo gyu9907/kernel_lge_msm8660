@@ -138,9 +138,21 @@ void arm_machine_flush_console(void)
  */
 static u64 soft_restart_stack[16];
 
+/*                               
+                    
+                                                           
+ */
+#if 1 //                                                                
+extern void pet_watchdog(void);
+#endif
+
 static void __soft_restart(void *addr)
 {
 	phys_reset_t phys_reset;
+
+#if 1 //                                                                
+	pet_watchdog();
+#endif
 
 	/* Take out a flat memory mapping. */
 	setup_mm_for_reboot();
@@ -252,11 +264,6 @@ void cpu_idle(void)
 		tick_nohz_idle_enter();
 		rcu_idle_enter();
 		while (!need_resched()) {
-#ifdef CONFIG_HOTPLUG_CPU
-			if (cpu_is_offline(smp_processor_id()))
-				cpu_die();
-#endif
-
 			/*
 			 * We need to disable interrupts here
 			 * to ensure we don't miss a wakeup call.
@@ -285,6 +292,10 @@ void cpu_idle(void)
 		tick_nohz_idle_exit();
 		idle_notifier_call_chain(IDLE_END);
 		schedule_preempt_disabled();
+#ifdef CONFIG_HOTPLUG_CPU
+		if (cpu_is_offline(smp_processor_id()))
+			cpu_die();
+#endif
 	}
 }
 
@@ -300,6 +311,7 @@ __setup("reboot=", reboot_setup);
 
 void machine_shutdown(void)
 {
+	preempt_disable();
 #ifdef CONFIG_SMP
 	smp_send_stop();
 #endif
@@ -320,6 +332,9 @@ void machine_power_off(void)
 
 void machine_restart(char *cmd)
 {
+#if 1 //                                                                
+	preempt_disable();
+#endif
 	machine_shutdown();
 
 	/* Flush the console to make sure all the relevant messages make it
@@ -327,6 +342,9 @@ void machine_restart(char *cmd)
 	arm_machine_flush_console();
 
 	arm_pm_restart(reboot_mode, cmd);
+#if 1 //                                                                
+	preempt_enable();
+#endif
 
 	/* Give a grace period for failure to restart of 1s */
 	mdelay(1000);
@@ -412,10 +430,7 @@ void __show_regs(struct pt_regs *regs)
 	unsigned long flags;
 	char buf[64];
 
-#ifdef CONFIG_LGE_CRASH_HANDLER
-#ifdef CONFIG_CPU_CP15_MMU
-	unsigned int c1, c2;
-#endif
+#ifdef CONFIG_LGE_HANDLE_PANIC
 	set_crash_store_enable();
 #endif
 	printk("CPU: %d    %s  (%s %.*s)\n",
@@ -425,8 +440,8 @@ void __show_regs(struct pt_regs *regs)
 		init_utsname()->version);
 	print_symbol("PC is at %s\n", instruction_pointer(regs));
 	print_symbol("LR is at %s\n", regs->ARM_lr);
-#ifdef CONFIG_LGE_CRASH_HANDLER
-	printk("pc : <%08lx>    lr : <%08lx>    psr: %08lx\n"
+#ifdef CONFIG_LGE_HANDLE_PANIC
+	printk("pc : %08lx    lr : %08lx    psr: %08lx\n"
 #else
 	printk("pc : [<%08lx>]    lr : [<%08lx>]    psr: %08lx\n"
 #endif
@@ -442,7 +457,7 @@ void __show_regs(struct pt_regs *regs)
 	printk("r3 : %08lx  r2 : %08lx  r1 : %08lx  r0 : %08lx\n",
 		regs->ARM_r3, regs->ARM_r2,
 		regs->ARM_r1, regs->ARM_r0);
-#ifdef CONFIG_LGE_CRASH_HANDLER
+#ifdef CONFIG_LGE_HANDLE_PANIC
 	set_crash_store_disable();
 #endif
 
@@ -472,18 +487,11 @@ void __show_regs(struct pt_regs *regs)
 			    : "=r" (transbase), "=r" (dac));
 			snprintf(buf, sizeof(buf), "  Table: %08x  DAC: %08x",
 			  	transbase, dac);
-#if defined(CONFIG_CPU_CP15_MMU) && defined(CONFIG_LGE_CRASH_HANDLER)
-			c1 = transbase;
-			c2 = dac;
-#endif
 		}
 #endif
 		asm("mrc p15, 0, %0, c1, c0\n" : "=r" (ctrl));
 
 		printk("Control: %08x%s\n", ctrl, buf);
-#if defined(CONFIG_CPU_CP15_MMU) && defined(CONFIG_LGE_CRASH_HANDLER)
-		lge_save_ctx(regs, ctrl, c1, c2);
-#endif
 	}
 #endif
 

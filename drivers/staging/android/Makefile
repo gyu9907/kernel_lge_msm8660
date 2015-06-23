@@ -1,3 +1,4 @@
+EXTRA_CFLAGS += -Iarch/arm/mach-msm     #added by mo2chunghan.lee@lge.com, 01/08/2013
 obj-$(CONFIG_ANDROID_BINDER_IPC)	+= binder.o
 obj-$(CONFIG_ASHMEM)			+= ashmem.o
 obj-$(CONFIG_ANDROID_LOGGER)		+= logger.o

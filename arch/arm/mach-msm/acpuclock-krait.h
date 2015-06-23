@@ -14,8 +14,7 @@
 #ifndef __ARCH_ARM_MACH_MSM_ACPUCLOCK_KRAIT_H
 #define __ARCH_ARM_MACH_MSM_ACPUCLOCK_KRAIT_H
 
-#define STBY_KHZ		1
-
+#define L2(x) (x)
 #define BW_MBPS(_bw) \
 	{ \
 		.vectors = (struct msm_bus_vectors[]){ \
@@ -39,7 +38,6 @@
 enum src_id {
 	PLL_0 = 0,
 	HFPLL,
-	QSB,
 	PLL_8,
 };
 
@@ -50,6 +48,7 @@ enum pvs {
 	PVS_SLOW = 0,
 	PVS_NOMINAL,
 	PVS_FAST,
+	PVS_FASTER,
 	PVS_UNKNOWN,
 	NUM_PVS
 };
@@ -73,6 +72,7 @@ enum hfpll_vdd_levels {
 	HFPLL_VDD_NONE,
 	HFPLL_VDD_LOW,
 	HFPLL_VDD_NOM,
+	HFPLL_VDD_HIGH,
 	NUM_HFPLL_VDD
 };
 
@@ -95,15 +95,15 @@ enum vregs {
  * @reg: Regulator handle.
  * @rpm_reg: RPM Regulator handle.
  * @cur_vdd: Last-set voltage in uV.
- * @peak_ua: Maximum current draw expected in uA.
+ * @cur_ua: Last-set current in uA.
  */
 struct vreg {
 	const char *name;
 	const int max_vdd;
-	const int peak_ua;
 	struct regulator *reg;
 	struct rpm_regulator *rpm_reg;
 	int cur_vdd;
+	int cur_ua;
 };
 
 /**
@@ -115,11 +115,11 @@ struct vreg {
  * @pll_l_val: HFPLL "L" value to be applied when an HFPLL source is selected.
  */
 struct core_speed {
-	const unsigned long khz;
-	const int src;
-	const u32 pri_src_sel;
-	const u32 sec_src_sel;
-	const u32 pll_l_val;
+	unsigned long khz;
+	int src;
+	u32 pri_src_sel;
+	u32 sec_src_sel;
+	u32 pll_l_val;
 };
 
 /**
@@ -142,12 +142,14 @@ struct l2_level {
  * @speed: CPU clock configuration.
  * @l2_level: L2 configuration to use.
  * @vdd_core: CPU core voltage in uV.
+ * @ua_core: CPU core current consumption in uA.
  */
 struct acpu_level {
 	const int use_for_scaling;
 	const struct core_speed speed;
-	const struct l2_level *l2_level;
+	const unsigned int l2_level;
 	int vdd_core;
+	int ua_core;
 };
 
 /**
@@ -162,7 +164,8 @@ struct acpu_level {
  * @droop_offset: Droop controller register offset from base address.
  * @droop_val: Value to initialize the @config_offset register to.
  * @low_vdd_l_max: Maximum "L" value supported at HFPLL_VDD_LOW.
- * @vdd: voltage requirements for each VDD level.
+ * @nom_vdd_l_max: Maximum "L" value supported at HFPLL_VDD_NOM.
+ * @vdd: voltage requirements for each VDD level for the L2 PLL.
  */
 struct hfpll_data {
 	const u32 mode_offset;
@@ -175,6 +178,7 @@ struct hfpll_data {
 	const u32 droop_offset;
 	const u32 droop_val;
 	const u32 low_vdd_l_max;
+	const u32 nom_vdd_l_max;
 	const int vdd[NUM_HFPLL_VDD];
 };
 
@@ -185,7 +189,6 @@ struct hfpll_data {
  * @aux_clk_sel_phys: Physical address of auxiliary MUX.
  * @aux_clk_sel: Auxiliary mux input to select at boot.
  * @l2cpmr_iaddr: Indirect address of the CPMR MUX/divider CP15 register.
- * @hfpll_data: Descriptive data of HFPLL hardware.
  * @cur_speed: Pointer to currently-set speed.
  * @l2_vote: L2 performance level vote associate with the current CPU speed.
  * @vreg: Array of voltage regulators needed by the scalable.
@@ -197,29 +200,46 @@ struct scalable {
 	const phys_addr_t aux_clk_sel_phys;
 	const u32 aux_clk_sel;
 	const u32 l2cpmr_iaddr;
-	const struct hfpll_data *hfpll_data;
 	const struct core_speed *cur_speed;
-	const struct l2_level *l2_vote;
+	unsigned int l2_vote;
 	struct vreg vreg[NUM_VREG];
 	bool initialized;
 };
 
 /**
+ * struct pvs_table - CPU performance level table and size.
+ * @table: CPU performance level table
+ * @size: sizeof(@table)
+ * @boost_uv: Voltage boost amount
+ */
+struct pvs_table {
+	struct acpu_level *table;
+	size_t size;
+	int boost_uv;
+};
+
+/**
  * struct acpuclk_krait_params - SoC specific driver parameters.
  * @scalable: Array of scalables.
- * @pvs_acpu_freq_tbl: Array of CPU frequency tables.
+ * @scalable_size: Size of @scalable.
+ * @hfpll_data: HFPLL configuration data.
+ * @pvs_tables: CPU frequency tables.
  * @l2_freq_tbl: L2 frequency table.
- * @l2_freq_tbl_size: Number of rows in @l2_freq_tbl.
+ * @l2_freq_tbl_size: Size of @l2_freq_tbl.
  * @qfprom_phys_base: Physical base address of QFPROM.
- * @bus_scale_data: MSM bus driver parameters.
+ * @bus_scale: MSM bus driver parameters.
+ * @stby_khz: KHz value corresponding to an always-on clock source.
  */
 struct acpuclk_krait_params {
 	struct scalable *scalable;
-	struct acpu_level *pvs_acpu_freq_tbl[NUM_PVS];
-	const struct l2_level *l2_freq_tbl;
-	const size_t l2_freq_tbl_size;
-	const phys_addr_t qfprom_phys_base;
-	struct msm_bus_scale_pdata *bus_scale_data;
+	size_t scalable_size;
+	struct hfpll_data *hfpll_data;
+	struct pvs_table *pvs_tables;
+	struct l2_level *l2_freq_tbl;
+	size_t l2_freq_tbl_size;
+	phys_addr_t qfprom_phys_base;
+	struct msm_bus_scale_pdata *bus_scale;
+	unsigned long stby_khz;
 };
 
 /**

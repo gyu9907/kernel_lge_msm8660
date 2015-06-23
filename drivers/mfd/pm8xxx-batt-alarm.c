@@ -16,6 +16,11 @@
 
 #define pr_fmt(fmt)	"%s: " fmt, __func__
 
+#ifndef CONFIG_LGE_PM_BATTERY_ALARM
+#undef CONFIG_LGE_PM_BATTERY_ALARM
+#define LGE_DEBUG
+#endif
+
 #include <linux/err.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
@@ -24,6 +29,13 @@
 #include <linux/slab.h>
 #include <linux/mfd/pm8xxx/core.h>
 #include <linux/mfd/pm8xxx/batt-alarm.h>
+
+#ifdef CONFIG_LGE_PM_BATTERY_ALARM
+#include <linux/wakelock.h>
+#include <linux/msm-charger.h>
+#include <linux/pmic8058-charger.h>
+#include <linux/max17040_battery.h>
+#endif
 
 /* Available voltage threshold values */
 #define THRESHOLD_MIN_MV		2500
@@ -95,14 +107,39 @@
  * are disabled by default and must be turned on by calling
  * pm8xxx_batt_alarm_state_set.
  */
+#ifdef CONFIG_LGE_PM_BATTERY_ALARM
+#define DEFAULT_THRESHOLD_LOWER        3500
+#define DEFAULT_THRESHOLD_UPPER        4350
+#else
 #define DEFAULT_THRESHOLD_LOWER		3200
 #define DEFAULT_THRESHOLD_UPPER		4300
+#endif
 #define DEFAULT_HOLD_TIME		PM8XXX_BATT_ALARM_HOLD_TIME_16_MS
 #define DEFAULT_USE_PWM			1
 #define DEFAULT_PWM_SCALER		9
 #define DEFAULT_PWM_DIVIDER		8
+#ifdef CONFIG_LGE_PM_BATTERY_ALARM
+#define DEFAULT_LOWER_ENABLE       1
+#define DEFAULT_UPPER_ENABLE       0
+#else
 #define DEFAULT_LOWER_ENABLE		0
 #define DEFAULT_UPPER_ENABLE		0
+#endif
+
+#ifdef CONFIG_LGE_PM_BATTERY_ALARM
+#define LGE_DEBUG
+#define DEFAULT_THRESHOLD_LOWER_CALC(x)		(3300 - (x*0))
+#define DEFAULT_THRESHOLD_UPPER_CALC(x)		(4350 - (x*150))
+
+#define P00_THRESHOLD_LOWER(x)		DEFAULT_THRESHOLD_LOWER_CALC(x)		/* 3300mV */
+#define P01_THRESHOLD_LOWER(x)		P00_THRESHOLD_LOWER(x) + 50	/* 3350mV */
+#define P03_THRESHOLD_LOWER(x)		P01_THRESHOLD_LOWER(x) + 50	/* 3400mV */
+#define P15_THRESHOLD_LOWER(x)		P03_THRESHOLD_LOWER(x) + 50	/* 3450mV */
+#define AUTO_CHARGING_RESUME_MV_CALC(x) (4250-(x*150))
+
+extern int lge_battery_info;
+
+#endif
 
 struct pm8xxx_batt_alarm_chip {
 	struct pm8xxx_batt_alarm_core_data	cdata;
@@ -166,6 +203,12 @@ int pm8xxx_batt_alarm_enable(enum pm8xxx_batt_alarm_comparator comparator)
 		mask_ctrl2 = CTRL2_COMP_UPPER_DISABLE_MASK;
 	}
 
+#ifdef LGE_DEBUG
+    if (comparator == PM8XXX_BATT_ALARM_LOWER_COMPARATOR)
+        pr_info("%s battery alarm lower enable\n", __func__);
+    else
+        pr_info("%s battery alarm upper enable\n", __func__);
+#endif
 	mutex_lock(&chip->lock);
 
 	/* Enable the battery alarm block. */
@@ -215,6 +258,13 @@ int pm8xxx_batt_alarm_disable(enum pm8xxx_batt_alarm_comparator comparator)
 		val_ctrl2 = CTRL2_COMP_UPPER_DISABLE;
 		mask_ctrl2 = CTRL2_COMP_UPPER_DISABLE_MASK;
 	}
+
+#ifdef LGE_DEBUG
+    if (comparator == PM8XXX_BATT_ALARM_LOWER_COMPARATOR)
+        pr_info("%s battery alarm lower disable\n", __func__);
+    else
+        pr_info("%s battery alarm upper disable\n", __func__);
+#endif
 
 	mutex_lock(&chip->lock);
 
@@ -289,7 +339,9 @@ int pm8xxx_batt_alarm_threshold_set(
 		fine_step_mask = CTRL2_FINE_STEP_UPPER_MASK;
 		fine_step_shift = CTRL2_FINE_STEP_UPPER_SHIFT;
 	}
-
+#ifdef LGE_DEBUG
+    pr_info("%s: threshod set value is %d\n", __func__, threshold_mV);
+#endif
 	/* Determine register settings to achieve the threshold. */
 	if (threshold_mV < THRESHOLD_BASIC_MIN_MV) {
 		/* Extended low range */
@@ -671,6 +723,67 @@ static int pm8xxx_batt_alarm_config_defaults(void)
 done:
 	return rc;
 }
+
+#ifdef CONFIG_LGE_PM_BATTERY_ALARM
+extern int is_chg_plugged_in(void );
+int pm8xxx_batt_alarm_config_lge(void)
+{
+    int rc = 0;
+    int mv = 0;
+	int threshold_mv = 0;
+
+    if (!is_chg_plugged_in()) {
+        mv = max17040_get_battery_mvolts();
+
+		if (mv > P15_THRESHOLD_LOWER(lge_battery_info))
+			threshold_mv = P15_THRESHOLD_LOWER(lge_battery_info);
+		else if (mv > P03_THRESHOLD_LOWER(lge_battery_info) && mv <= P15_THRESHOLD_LOWER(lge_battery_info))
+			threshold_mv = P03_THRESHOLD_LOWER(lge_battery_info);
+		else if (mv > P01_THRESHOLD_LOWER(lge_battery_info) && mv <= P03_THRESHOLD_LOWER(lge_battery_info))
+			threshold_mv = P01_THRESHOLD_LOWER(lge_battery_info);
+		else
+			threshold_mv = P00_THRESHOLD_LOWER(lge_battery_info);
+    }
+    else
+        threshold_mv = AUTO_CHARGING_RESUME_MV_CALC(lge_battery_info);
+
+    /* Use default values when no platform data is provided. */
+    rc = pm8xxx_batt_alarm_threshold_set(PM8XXX_BATT_ALARM_LOWER_COMPARATOR, threshold_mv);
+    if (rc) {
+        pr_err("threshold_set failed, rc=%d\n", rc);
+        goto done;
+    }
+
+    rc = pm8xxx_batt_alarm_hold_time_set(DEFAULT_HOLD_TIME);
+    if (rc) {
+        pr_err("hold_time_set failed, rc=%d\n", rc);
+        goto done;
+    }
+
+    rc = pm8xxx_batt_alarm_pwm_rate_set(DEFAULT_USE_PWM,
+            DEFAULT_PWM_SCALER, DEFAULT_PWM_DIVIDER);
+    if (rc) {
+        pr_err("pwm_rate_set failed, rc=%d\n", rc);
+        goto done;
+    }
+
+    rc = pm8xxx_batt_alarm_enable(PM8XXX_BATT_ALARM_LOWER_COMPARATOR);
+    if (rc) {
+        pr_err("enable lower failed, rc=%d\n", rc);
+        goto done;
+    }
+
+    rc = pm8xxx_batt_alarm_disable(PM8XXX_BATT_ALARM_UPPER_COMPARATOR);
+    if (rc) {
+        pr_err("disable upper failed, rc=%d\n", rc);
+        goto done;
+    }
+
+done:
+    return rc;
+}
+EXPORT_SYMBOL(pm8xxx_batt_alarm_config_lge);
+#endif
 
 static int __devinit pm8xxx_batt_alarm_probe(struct platform_device *pdev)
 {

@@ -32,6 +32,12 @@ enum msm_hardware_charger_event {
 	CHG_BATT_INSERTED,
 	CHG_BATT_REMOVED,
 	CHG_BATT_STATUS_CHANGE,
+#if defined(CONFIG_MACH_LGE_I_BOARD)
+//                                  
+	CHG_BATT_REMOVE_EVENT,  /*                                   */
+//#endif
+    CHG_BATT_REFRESH_EVENT,     /*                                  */
+#endif
 	CHG_BATT_NEEDS_RECHARGING,
 };
 
@@ -74,7 +80,17 @@ struct msm_battery_gauge {
 	int (*is_battery_id_valid) (void);
 	int (*get_battery_status)(void);
 	int (*get_batt_remaining_capacity) (void);
+#if defined (CONFIG_MACH_LGE_I_BOARD) 
+#ifdef CONFIG_LGE_CHARGER_TEMP_SCENARIO
+	int (*get_battery_temperature_adc) (void);
+#endif
+#endif
 	int (*monitor_for_recharging) (void);
+#if defined (CONFIG_MACH_LGE_I_BOARD)
+#ifdef CONFIG_LGE_PM
+	uint32_t (*get_hw_fsm_state) (void);
+#endif
+#endif
 };
 /**
  * struct msm_charger_platform_data
@@ -105,6 +121,14 @@ void msm_charger_vbus_draw(unsigned int mA);
 
 int msm_charger_register_vbus_sn(void (*callback)(int));
 void msm_charger_unregister_vbus_sn(void (*callback)(int));
+
+#ifdef CONFIG_MACH_LGE_120_BOARD
+#if defined(CONFIG_LGE_PM_CAYMAN_VZW) || defined(CONFIG_LGE_PM_CAYMAN_MPCS)
+void testmode_charging_mode_test(void);
+void testmode_discharging_mode_test(void);
+#endif /*                                                           */
+#endif
+
 #else
 static inline void msm_battery_gauge_register(struct msm_battery_gauge *gauge)
 {

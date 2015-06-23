@@ -26,7 +26,26 @@ obj-$(CONFIG_SND_SOC_MSM8X60_DAI) += snd-soc-msm8x60-dai.o
 snd-soc-msm8x60-pcm-objs := msm8x60-pcm.o
 obj-$(CONFIG_SND_SOC_MSM8X60_PCM) += snd-soc-msm8x60-pcm.o
 
+#for tag - added by mo2chunghan.lee@lge.com, 11/13/2012 =====
+# wooho.jeong@lge.com 2012.11.26
+# apply Product
+ifeq ($(TARGET_PRODUCT),i_skt)
+snd-soc-msm8x60-objs := msm8x60_domestic.o
+else ifeq ($(TARGET_PRODUCT),i_lgu)
+snd-soc-msm8x60-objs := msm8x60_domestic.o
+# mo2sujin.kim, 130116, remove domestic exception for cayman
+# else ifeq ($(TARGET_PRODUCT),cayman_skt_kr)
+# snd-soc-msm8x60-objs := msm8x60_domestic.o
+# else ifeq ($(TARGET_PRODUCT),cayman_kt_kr)
+# snd-soc-msm8x60-objs := msm8x60_domestic.o
+# else ifeq ($(TARGET_PRODUCT),cayman_lgu_kr)
+# snd-soc-msm8x60-objs := msm8x60_domestic.o
+#for Tag only !
+#else ifeq ($(TARGET_PRODUCT),msm8660_surf)      #TEST_CODE - by mo2chunghan.lee@lge.com, Fusion2_JB_Tag-11/13/2012
+#snd-soc-msm8x60-objs := msm8x60_domestic.o
+else
 snd-soc-msm8x60-objs := msm8x60.o
+endif	#=====================================================
 obj-$(CONFIG_SND_SOC_MSM8X60) += snd-soc-msm8x60.o
 
 

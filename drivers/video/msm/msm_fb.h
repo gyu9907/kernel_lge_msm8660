@@ -80,6 +80,7 @@ struct msm_fb_data_type {
 	DISP_TARGET dest;
 	struct fb_info *fbi;
 
+	struct device *dev;
 	boolean op_enable;
 	uint32 fb_imgType;
 	boolean sw_currently_refreshing;
@@ -125,6 +126,7 @@ struct msm_fb_data_type {
 	__u32 channel_irq;
 
 	struct mdp_dma_data *dma;
+	struct device_attribute dev_attr;
 	void (*dma_fnc) (struct msm_fb_data_type *mfd);
 	int (*cursor_update) (struct fb_info *info,
 			      struct fb_cursor *cursor);
@@ -134,6 +136,9 @@ struct msm_fb_data_type {
 			      struct mdp_histogram_data *hist);
 	int (*start_histogram) (struct mdp_histogram_start_req *req);
 	int (*stop_histogram) (struct fb_info *info, uint32_t block);
+	void (*vsync_ctrl) (int enable);
+	void (*vsync_init) (int cndx);
+	void *vsync_show;
 	void *cursor_buf;
 	void *cursor_buf_phys;
 
@@ -182,11 +187,10 @@ struct msm_fb_data_type {
 	u32 ov_start;
 	u32 mem_hid;
 	u32 mdp_rev;
-	u32 use_ov0_blt, ov0_blt_state;
-	u32 use_ov1_blt, ov1_blt_state;
 	u32 writeback_state;
 	bool writeback_active_cnt;
 	int cont_splash_done;
+	int vsync_sysfs_created;
 };
 
 struct dentry *msm_fb_get_debugfs_root(void);
@@ -217,7 +221,9 @@ int msm_fb_check_frame_rate(struct msm_fb_data_type *mfd,
 				struct fb_info *info);
 
 #ifdef CONFIG_FB_MSM_LOGO
+#if 0 /*                                        */
 #define INIT_IMAGE_FILE "/initlogo.rle"
+#endif
 int load_565rle_image(char *filename, bool bf_supported);
 #endif
 

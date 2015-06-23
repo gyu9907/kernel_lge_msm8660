@@ -46,7 +46,6 @@
 
 /* Address of GSBI blocks */
 #define MSM_GSBI1_PHYS		0x12440000
-#define MSM_GSBI2_PHYS		0x13440000
 #define MSM_GSBI3_PHYS		0x16200000
 #define MSM_GSBI4_PHYS		0x16300000
 #define MSM_GSBI5_PHYS		0x1A200000
@@ -56,13 +55,10 @@
 /* GSBI UART devices */
 #define MSM_UART1DM_PHYS	(MSM_GSBI1_PHYS + 0x10000)
 #define MSM_UART3DM_PHYS	(MSM_GSBI3_PHYS + 0x40000)
-#define MSM_UART4DM_PHYS	(MSM_GSBI4_PHYS + 0x40000)
-#define MSM_UART6DM_PHYS	(MSM_GSBI6_PHYS + 0x40000)
 #define MSM_UART7DM_PHYS	(MSM_GSBI7_PHYS + 0x40000)
 
 /* GSBI QUP devices */
 #define MSM_GSBI1_QUP_PHYS	(MSM_GSBI1_PHYS + 0x20000)
-#define MSM_GSBI2_QUP_PHYS	(MSM_GSBI2_PHYS + 0x20000)
 #define MSM_GSBI3_QUP_PHYS	(MSM_GSBI3_PHYS + 0x80000)
 #define MSM_GSBI4_QUP_PHYS	(MSM_GSBI4_PHYS + 0x80000)
 #define MSM_GSBI5_QUP_PHYS	(MSM_GSBI5_PHYS + 0x80000)
@@ -273,33 +269,6 @@ struct platform_device apq8064_device_qup_i2c_gsbi3 = {
 	.id		= 3,
 	.num_resources	= ARRAY_SIZE(resources_qup_i2c_gsbi3),
 	.resource	= resources_qup_i2c_gsbi3,
-};
-
-static struct resource resources_uart_gsbi4[] = {
-	{
-		.start = GSBI4_UARTDM_IRQ,
-		.end = GSBI4_UARTDM_IRQ,
-		.flags = IORESOURCE_IRQ,
-	},
-	{
-		.start = MSM_UART4DM_PHYS,
-		.end = MSM_UART4DM_PHYS + PAGE_SIZE - 1,
-		.name = "uartdm_resource",
-		.flags = IORESOURCE_MEM,
-	},
-	{
-		.start = MSM_GSBI4_PHYS,
-		.end = MSM_GSBI4_PHYS + PAGE_SIZE - 1,
-		.name = "gsbi_resource",
-		.flags = IORESOURCE_MEM,
-	},
-};
-
-struct platform_device apq8064_device_uart_gsbi4 = {
-	.name = "msm_serial_hsl",
-	.id = 0,
-	.num_resources = ARRAY_SIZE(resources_uart_gsbi4),
-	.resource = resources_uart_gsbi4,
 };
 
 static struct resource resources_qup_i2c_gsbi4[] = {
@@ -646,6 +615,11 @@ struct platform_device apq_cpudai_slimbus_3_rx = {
 	.id = 0x4006,
 };
 
+struct platform_device apq_cpudai_slimbus_3_tx = {
+	.name = "msm-dai-q6",
+	.id = 0x4007,
+};
+
 static struct resource resources_ssbi_pmic1[] = {
 	{
 		.start  = MSM_PMIC1_SSBI_CMD_PHYS,
@@ -876,6 +850,11 @@ struct platform_device apq8064_device_ehci_host4 = {
 		.dma_mask               = &dma_mask,
 		.coherent_dma_mask      = 0xffffffff,
 	},
+};
+
+struct platform_device apq8064_device_acpuclk = {
+	.name		= "acpuclk-8064",
+	.id		= -1,
 };
 
 #define SHARED_IMEM_TZ_BASE 0x2a03f720
@@ -2226,7 +2205,6 @@ static uint16_t msm_mpm_irqs_m2a[MSM_MPM_NR_MPM_IRQS] __initdata = {
 	[53] = MSM_GPIO_TO_INT(10),
 	[54] = MSM_GPIO_TO_INT(81),
 	[55] = MSM_GPIO_TO_INT(6),
-	[56] = MSM_GPIO_TO_INT(82),
 };
 
 static uint16_t msm_mpm_bypassed_apps_irqs[] __initdata = {

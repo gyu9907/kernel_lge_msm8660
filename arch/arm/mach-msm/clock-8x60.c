@@ -3481,11 +3481,15 @@ static struct measure_clk measure_clk = {
 	.divider = 1,
 };
 
+#ifdef CONFIG_MACH_LGE_325_BOARD /*                                                                    */
 static struct clk_lookup msm_clocks_8x60[] = {
 	CLK_LOOKUP("xo",		cxo_clk.c,	""),
 	CLK_LOOKUP("xo",		cxo_a_clk.c,	""),
 	CLK_LOOKUP("xo",		pxo_a_clk.c,	""),
 	CLK_LOOKUP("xo",		pxo_clk.c,	"pil_modem"),
+#if 1 /*                                                          */
+	CLK_LOOKUP("vref_buff",     cxo_clk.c,  "rpm-regulator"),
+#endif
 	CLK_LOOKUP("pll4",		pll4_clk.c,	"pil_qdsp6v3"),
 	CLK_LOOKUP("measure",		measure_clk.c,	"debug"),
 
@@ -3499,8 +3503,13 @@ static struct clk_lookup msm_clocks_8x60[] = {
 	CLK_LOOKUP("mem_clk",		ebi1_a_clk.c,	""),
 	CLK_LOOKUP("bus_clk",		mmfab_clk.c,	""),
 	CLK_LOOKUP("bus_clk",		mmfab_a_clk.c,	""),
+#if 1 /*                                                     */
 	CLK_LOOKUP("bus_clk",		mmfpb_clk.c,	""),
 	CLK_LOOKUP("bus_clk",		mmfpb_a_clk.c,	""),
+#else
+	CLK_LOOKUP("mmfpb_clk",		mmfpb_clk.c,	""),
+	CLK_LOOKUP("mmfpb_a_clk",		mmfpb_a_clk.c,	""),
+#endif
 	CLK_LOOKUP("bus_clk",		sfab_clk.c,	""),
 	CLK_LOOKUP("bus_clk",		sfab_a_clk.c,	""),
 	CLK_LOOKUP("bus_clk",		sfpb_clk.c,	""),
@@ -3522,6 +3531,9 @@ static struct clk_lookup msm_clocks_8x60[] = {
 	CLK_LOOKUP("mem_a_clk",		ebi1_msmbus_a_clk.c, "msm_bus"),
 	CLK_LOOKUP("smi_clk",		smi_clk.c,	"msm_bus"),
 	CLK_LOOKUP("smi_a_clk",		smi_a_clk.c,	"msm_bus"),
+#if 1 /*                                                          */
+	CLK_LOOKUP("mmfpb_a_clk",   mmfpb_a_clk.c,  "clock-8x60"),
+#endif
 
 	CLK_LOOKUP("core_clk",		gp0_clk.c,		""),
 	CLK_LOOKUP("core_clk",		gp1_clk.c,		""),
@@ -3533,22 +3545,51 @@ static struct clk_lookup msm_clocks_8x60[] = {
 	CLK_LOOKUP("core_clk",		gsbi5_uart_clk.c,	""),
 	CLK_LOOKUP("core_clk",		gsbi6_uart_clk.c, "msm_serial_hs.0"),
 	CLK_LOOKUP("core_clk",		gsbi7_uart_clk.c,	""),
+#ifdef CONFIG_LGE_IRDA	/*                                        */
+	CLK_LOOKUP("core_clk",		gsbi8_uart_clk.c,	"msm_serial_hsl.4"),
+#else
 	CLK_LOOKUP("core_clk",		gsbi8_uart_clk.c,	""),
+#endif
 	CLK_LOOKUP("core_clk",		gsbi9_uart_clk.c, "msm_serial_hsl.1"),
+#ifdef CONFIG_LGE_FELICA	/*                                        */
+	CLK_LOOKUP("core_clk",		gsbi10_uart_clk.c,	"msm_serial_hsl.3"),
+#else
 	CLK_LOOKUP("core_clk",		gsbi10_uart_clk.c,	""),
+#endif
 	CLK_LOOKUP("core_clk",		gsbi11_uart_clk.c,	""),
 	CLK_LOOKUP("core_clk",		gsbi12_uart_clk.c, "msm_serial_hsl.0"),
+#if defined (CONFIG_LGE_TOUCHSCREEN_SYNAPTICS_RMI4_I2C) || defined (CONFIG_LGE_TOUCH_SYNAPTICS_325)	/*                                        */
+	CLK_LOOKUP("core_clk",		gsbi1_qup_clk.c,	"qup_i2c.10"),
+#else
 	CLK_LOOKUP("core_clk",		gsbi1_qup_clk.c,	"spi_qsd.0"),
+#endif
 	CLK_LOOKUP("core_clk",		gsbi2_qup_clk.c,	""),
 	CLK_LOOKUP("core_clk",		gsbi3_qup_clk.c,	"qup_i2c.0"),
 	CLK_LOOKUP("core_clk",		gsbi4_qup_clk.c,	"qup_i2c.1"),
+#ifdef CONFIG_LGE_FUEL_GAUGE	/*                                        */
+	CLK_LOOKUP("core_clk",		gsbi5_qup_clk.c,	"qup_i2c.11"),
+#else
 	CLK_LOOKUP("core_clk",		gsbi5_qup_clk.c,	""),
+#endif
 	CLK_LOOKUP("core_clk",		gsbi6_qup_clk.c,	""),
 	CLK_LOOKUP("core_clk",		gsbi7_qup_clk.c,	"qup_i2c.4"),
 	CLK_LOOKUP("core_clk",		gsbi8_qup_clk.c,	"qup_i2c.3"),
 	CLK_LOOKUP("core_clk",		gsbi9_qup_clk.c,	"qup_i2c.2"),
+#ifdef CONFIG_LGE_SENSOR_ACCELEROMETER	/*                                        */
+	CLK_LOOKUP("core_clk",		gsbi10_qup_clk.c,	"qup_i2c.9"),
+#else
 	CLK_LOOKUP("core_clk",		gsbi10_qup_clk.c,	"spi_qsd.1"),
+#endif
+#if defined(CONFIG_LGE_BROADCAST_TDMB) || defined(CONFIG_LGE_BROADCAST_1SEG) ||  defined(CONFIG_LGE_BROADCAST_DCM) || defined(CONFIG_LGE_BROADCAST_ONESEG)	/*                                        */
+	CLK_LOOKUP("core_clk",		gsbi11_qup_clk.c,	"spi_qsd.2"),
+#else
 	CLK_LOOKUP("core_clk",		gsbi11_qup_clk.c,	""),
+#endif
+#if defined (CONFIG_LGE_WIRELESS_CHARGER_MAX8971) || defined (CONFIG_LGE_WIRELESS_CHARGER_BQ24160)	/*                                        */
+	CLK_LOOKUP("core_clk",		gsbi11_qup_clk.c,	"qup_i2c.12"),
+#else
+	CLK_LOOKUP("core_clk",		gsbi11_qup_clk.c,	""),
+#endif
 	CLK_LOOKUP("gsbi_qup_clk",	gsbi12_qup_clk.c,	"msm_dsps"),
 	CLK_LOOKUP("core_clk",		gsbi12_qup_clk.c,	"qup_i2c.5"),
 	CLK_LOOKUP("core_clk",		pdm_clk.c,		""),
@@ -3572,20 +3613,56 @@ static struct clk_lookup msm_clocks_8x60[] = {
 	CLK_LOOKUP("src_clk",		usb_fs2_src_clk.c,	""),
 	CLK_LOOKUP("core_clk",		ce2_p_clk.c,		"qce.0"),
 	CLK_LOOKUP("core_clk",		ce2_p_clk.c,		"qcrypto.0"),
+#if defined (CONFIG_LGE_TOUCHSCREEN_SYNAPTICS_RMI4_I2C) || defined (CONFIG_LGE_TOUCH_SYNAPTICS_325)	/*                                        */
+	CLK_LOOKUP("iface_clk",		gsbi1_p_clk.c,		"qup_i2c.10"),
+#else
 	CLK_LOOKUP("iface_clk",		gsbi1_p_clk.c,		"spi_qsd.0"),
+#endif
 	CLK_LOOKUP("iface_clk",		gsbi2_p_clk.c,		""),
 	CLK_LOOKUP("iface_clk",		gsbi3_p_clk.c, "msm_serial_hsl.2"),
 	CLK_LOOKUP("iface_clk",		gsbi3_p_clk.c,		"qup_i2c.0"),
 	CLK_LOOKUP("iface_clk",		gsbi4_p_clk.c,		"qup_i2c.1"),
+#ifdef CONFIG_LGE_FUEL_GAUGE
+	CLK_LOOKUP("iface_clk",		gsbi5_p_clk.c,		"qup_i2c.11"),
+#else
 	CLK_LOOKUP("iface_clk",		gsbi5_p_clk.c,		""),
+#endif
 	CLK_LOOKUP("iface_clk",		gsbi6_p_clk.c, "msm_serial_hs.0"),
 	CLK_LOOKUP("iface_clk",		gsbi7_p_clk.c,		"qup_i2c.4"),
+#if defined(CONFIG_LGE_MHL_SII9244) || defined(CONFIG_LGE_IRDA)
+#ifdef CONFIG_LGE_IRDA
+	CLK_LOOKUP("iface_clk",		gsbi8_p_clk.c,		"msm_serial_hsl.4"),
+#endif
+#ifdef CONFIG_LGE_MHL_SII9244
 	CLK_LOOKUP("iface_clk",		gsbi8_p_clk.c,		"qup_i2c.3"),
+#endif
+#else
+	CLK_LOOKUP("iface_clk",		gsbi8_p_clk.c,		""),
+#endif
 	CLK_LOOKUP("iface_clk",		gsbi9_p_clk.c, "msm_serial_hsl.1"),
 	CLK_LOOKUP("iface_clk",		gsbi9_p_clk.c,		"qup_i2c.2"),
+#ifdef CONFIG_LGE_FELICA
+	CLK_LOOKUP("iface_clk",		gsbi10_p_clk.c,		"msm_serial_hsl.3"),
+#else
 	CLK_LOOKUP("iface_clk",		gsbi10_p_clk.c,		"spi_qsd.1"),
+#endif
+#if defined (CONFIG_LGE_SENSOR_DCOMPASS) || defined(CONFIG_LGE_SENSOR_PROXIMITY) /*                                  */
+	CLK_LOOKUP("iface_clk",     gsbi10_p_clk.c,     "qup_i2c.9"),
+#endif
+#if defined(CONFIG_LGE_BROADCAST_TDMB) || defined(CONFIG_LGE_BROADCAST_1SEG) ||  defined(CONFIG_LGE_BROADCAST_DCM) ||  defined(CONFIG_LGE_BROADCAST_ONESEG)
+	CLK_LOOKUP("iface_clk",		gsbi11_p_clk.c,		"spi_qsd.2"),
+#else   /*                    */
 	CLK_LOOKUP("iface_clk",		gsbi11_p_clk.c,		""),
+#endif  /*                    */
+#if defined (CONFIG_LGE_WIRELESS_CHARGER_MAX8971) || defined (CONFIG_LGE_WIRELESS_CHARGER_BQ24160)
+	CLK_LOOKUP("iface_clk",		gsbi11_p_clk.c,		"qup_i2c.12"),
+#else
+	CLK_LOOKUP("iface_clk",		gsbi11_p_clk.c,		""),
+#endif
+
+#if 0 /*                                        */
 	CLK_LOOKUP("iface_clk",		gsbi12_p_clk.c,		""),
+#endif
 	CLK_LOOKUP("iface_clk",		gsbi12_p_clk.c, "msm_serial_hsl.0"),
 	CLK_LOOKUP("iface_clk",		gsbi12_p_clk.c,		"qup_i2c.5"),
 	CLK_LOOKUP("iface_clk",		ppss_p_clk.c,		"msm_dsps"),
@@ -3613,8 +3690,6 @@ static struct clk_lookup msm_clocks_8x60[] = {
 	CLK_LOOKUP("mem_clk",		rpm_msg_ram_p_clk.c,	""),
 	CLK_LOOKUP("cam_clk",		cam_clk.c,		NULL),
 	CLK_LOOKUP("csi_clk",		csi0_clk.c,		NULL),
-	CLK_LOOKUP("csi_clk",		csi1_clk.c, "msm_camera_ov7692.0"),
-	CLK_LOOKUP("csi_clk",		csi1_clk.c, "msm_camera_ov9726.0"),
 	CLK_LOOKUP("csi_clk",		csi1_clk.c, "msm_csic.1"),
 	CLK_LOOKUP("csi_src_clk",	csi_src_clk.c,		NULL),
 	CLK_LOOKUP("byte_clk",	dsi_byte_clk.c,		"mipi_dsi.1"),
@@ -3651,8 +3726,6 @@ static struct clk_lookup msm_clocks_8x60[] = {
 	CLK_LOOKUP("vpe_clk",		vpe_clk.c,		NULL),
 	CLK_LOOKUP("core_clk",		vpe_clk.c,	"footswitch-8x60.9"),
 	CLK_LOOKUP("csi_vfe_clk",	csi0_vfe_clk.c,		NULL),
-	CLK_LOOKUP("csi_vfe_clk",	csi1_vfe_clk.c, "msm_camera_ov7692.0"),
-	CLK_LOOKUP("csi_vfe_clk",	csi1_vfe_clk.c, "msm_camera_ov9726.0"),
 	CLK_LOOKUP("csi_vfe_clk",	csi1_vfe_clk.c, "msm_csic.1"),
 	CLK_LOOKUP("vfe_clk",		vfe_clk.c,		NULL),
 	CLK_LOOKUP("core_clk",		vfe_clk.c,	"footswitch-8x60.8"),
@@ -3665,8 +3738,6 @@ static struct clk_lookup msm_clocks_8x60[] = {
 	CLK_LOOKUP("bus_clk",		vpe_axi_clk.c,	 "footswitch-8x60.9"),
 	CLK_LOOKUP("arb_clk",		amp_p_clk.c,		"mipi_dsi.1"),
 	CLK_LOOKUP("csi_pclk",		csi0_p_clk.c,		NULL),
-	CLK_LOOKUP("csi_pclk",		csi1_p_clk.c, "msm_camera_ov7692.0"),
-	CLK_LOOKUP("csi_pclk",		csi1_p_clk.c, "msm_camera_ov9726.0"),
 	CLK_LOOKUP("csi_pclk",		csi1_p_clk.c,		"msm_csic.1"),
 	CLK_LOOKUP("master_iface_clk",	dsi_m_p_clk.c,		"mipi_dsi.1"),
 	CLK_LOOKUP("slave_iface_clk",	dsi_s_p_clk.c,		"mipi_dsi.1"),
@@ -3745,6 +3816,369 @@ static struct clk_lookup msm_clocks_8x60[] = {
 	CLK_LOOKUP("sc1_mclk",		sc1_m_clk, ""),
 	CLK_LOOKUP("l2_mclk",		l2_m_clk,  ""),
 };
+#else /*                                                                                 */
+static struct clk_lookup msm_clocks_8x60[] = {
+	CLK_LOOKUP("xo",		cxo_clk.c,	""),
+	CLK_LOOKUP("xo",		cxo_a_clk.c,	""),
+	CLK_LOOKUP("xo",		pxo_a_clk.c,	""),
+	CLK_LOOKUP("xo",		pxo_clk.c,	"pil_modem"),
+#if 1 /*                                                          */
+	CLK_LOOKUP("vref_buff",     cxo_clk.c,  "rpm-regulator"),
+#endif
+	CLK_LOOKUP("pll4",		pll4_clk.c,	"pil_qdsp6v3"),
+	CLK_LOOKUP("measure",		measure_clk.c,	"debug"),
+
+	CLK_LOOKUP("bus_clk",		afab_clk.c,	""),
+	CLK_LOOKUP("bus_clk",		afab_a_clk.c,	""),
+	CLK_LOOKUP("bus_clk",		cfpb_clk.c,	""),
+	CLK_LOOKUP("bus_clk",		cfpb_a_clk.c,	""),
+	CLK_LOOKUP("bus_clk",		dfab_clk.c,	""),
+	CLK_LOOKUP("bus_clk",		dfab_a_clk.c,	""),
+	CLK_LOOKUP("mem_clk",		ebi1_clk.c,	""),
+	CLK_LOOKUP("mem_clk",		ebi1_a_clk.c,	""),
+	CLK_LOOKUP("bus_clk",		mmfab_clk.c,	""),
+	CLK_LOOKUP("bus_clk",		mmfab_a_clk.c,	""),
+#if 1 /*                                                     */
+	CLK_LOOKUP("bus_clk",		mmfpb_clk.c,	""),
+	CLK_LOOKUP("bus_clk",		mmfpb_a_clk.c,	""),
+#else
+	CLK_LOOKUP("mmfpb_clk",		mmfpb_clk.c,	""),
+	CLK_LOOKUP("mmfpb_a_clk",		mmfpb_a_clk.c,	""),
+#endif
+	CLK_LOOKUP("bus_clk",		sfab_clk.c,	""),
+	CLK_LOOKUP("bus_clk",		sfab_a_clk.c,	""),
+	CLK_LOOKUP("bus_clk",		sfpb_clk.c,	""),
+	CLK_LOOKUP("bus_clk",		sfpb_a_clk.c,	""),
+	CLK_LOOKUP("mem_clk",		smi_clk.c,	""),
+	CLK_LOOKUP("mem_clk",		smi_a_clk.c,	""),
+
+	CLK_LOOKUP("bus_clk",		afab_clk.c,	"msm_apps_fab"),
+	CLK_LOOKUP("bus_a_clk",		afab_msmbus_a_clk.c, "msm_apps_fab"),
+	CLK_LOOKUP("bus_clk",		sfab_clk.c,	"msm_sys_fab"),
+	CLK_LOOKUP("bus_a_clk",		sfab_a_clk.c,	"msm_sys_fab"),
+	CLK_LOOKUP("bus_clk",		sfpb_clk.c,	"msm_sys_fpb"),
+	CLK_LOOKUP("bus_a_clk",		sfpb_a_clk.c,	"msm_sys_fpb"),
+	CLK_LOOKUP("bus_clk",		mmfab_clk.c,	"msm_mm_fab"),
+	CLK_LOOKUP("bus_a_clk",		mmfab_a_clk.c,	"msm_mm_fab"),
+	CLK_LOOKUP("bus_clk",		cfpb_clk.c,	"msm_cpss_fpb"),
+	CLK_LOOKUP("bus_a_clk",		cfpb_a_clk.c,	"msm_cpss_fpb"),
+	CLK_LOOKUP("mem_clk",		ebi1_msmbus_clk.c, "msm_bus"),
+	CLK_LOOKUP("mem_a_clk",		ebi1_msmbus_a_clk.c, "msm_bus"),
+	CLK_LOOKUP("smi_clk",		smi_clk.c,	"msm_bus"),
+	CLK_LOOKUP("smi_a_clk",		smi_a_clk.c,	"msm_bus"),
+#if 1 /*                                                          */
+	CLK_LOOKUP("mmfpb_a_clk",   mmfpb_a_clk.c,  "clock-8x60"),
+#endif
+
+	CLK_LOOKUP("core_clk",		gp0_clk.c,		""),
+	CLK_LOOKUP("core_clk",		gp1_clk.c,		""),
+	CLK_LOOKUP("core_clk",		gp2_clk.c,		""),
+	CLK_LOOKUP("core_clk",		gsbi1_uart_clk.c,	""),
+	CLK_LOOKUP("core_clk",		gsbi2_uart_clk.c,	""),
+	CLK_LOOKUP("core_clk",		gsbi3_uart_clk.c, "msm_serial_hsl.2"),
+	CLK_LOOKUP("core_clk",		gsbi4_uart_clk.c,	""),
+	CLK_LOOKUP("core_clk",		gsbi5_uart_clk.c,	""),
+	CLK_LOOKUP("core_clk",		gsbi6_uart_clk.c, "msm_serial_hs.0"),
+	CLK_LOOKUP("core_clk",		gsbi7_uart_clk.c,	""),
+	CLK_LOOKUP("core_clk",		gsbi8_uart_clk.c,	""),
+	CLK_LOOKUP("core_clk",		gsbi9_uart_clk.c, "msm_serial_hsl.1"),
+#ifdef CONFIG_LGE_FELICA /*                                                       */
+	CLK_LOOKUP("core_clk",		gsbi10_uart_clk.c,	"msm_serial_hsl.3"),
+#else
+	CLK_LOOKUP("core_clk",		gsbi10_uart_clk.c,	""),
+#endif
+	CLK_LOOKUP("core_clk",		gsbi11_uart_clk.c,	""),
+	CLK_LOOKUP("core_clk",		gsbi12_uart_clk.c, "msm_serial_hsl.0"),
+#if defined (CONFIG_LGE_TOUCHSCREEN_SYNAPTICS_RMI4_I2C) /*                                                       */
+	CLK_LOOKUP("core_clk",		gsbi1_qup_clk.c,	"qup_i2c.10"),
+#else
+	CLK_LOOKUP("core_clk",		gsbi1_qup_clk.c,	"spi_qsd.0"),
+#endif
+	CLK_LOOKUP("core_clk",		gsbi2_qup_clk.c,	""),
+	CLK_LOOKUP("core_clk",		gsbi3_qup_clk.c,	"qup_i2c.0"),
+	CLK_LOOKUP("core_clk",		gsbi4_qup_clk.c,	"qup_i2c.1"),
+#ifdef CONFIG_LGE_FUEL_GAUGE /*                                                       */
+	CLK_LOOKUP("core_clk",		gsbi5_qup_clk.c,	"qup_i2c.11"),
+#else
+	CLK_LOOKUP("core_clk",		gsbi5_qup_clk.c,	""),
+#endif
+	CLK_LOOKUP("core_clk",		gsbi6_qup_clk.c,	""),
+	CLK_LOOKUP("core_clk",		gsbi7_qup_clk.c,	"qup_i2c.4"),
+	CLK_LOOKUP("core_clk",		gsbi8_qup_clk.c,	"qup_i2c.3"),
+	CLK_LOOKUP("core_clk",		gsbi9_qup_clk.c,	"qup_i2c.2"),
+#ifdef CONFIG_LGE_SENSOR_ACCELEROMETER /*                                                       */
+	CLK_LOOKUP("core_clk",		gsbi10_qup_clk.c,	"qup_i2c.9"),
+#else
+	CLK_LOOKUP("core_clk",		gsbi10_qup_clk.c,	"spi_qsd.1"),
+#endif
+#if defined(CONFIG_LGE_BROADCAST_TDMB) || defined(CONFIG_LGE_BROADCAST_ONESEG) /*                                                       */
+	CLK_LOOKUP("core_clk",		gsbi11_qup_clk.c,	"spi_qsd.2"),
+#else
+	CLK_LOOKUP("core_clk",		gsbi11_qup_clk.c,	""),
+#endif
+#if defined (CONFIG_LGE_WIRELESS_CHARGER_MAX8971) || defined (CONFIG_LGE_WIRELESS_CHARGER_BQ24160) /*                                                       */
+	CLK_LOOKUP("core_clk",		gsbi11_qup_clk.c,	"qup_i2c.12"),
+#else
+	CLK_LOOKUP("core_clk",		gsbi11_qup_clk.c,	""),
+#endif
+	CLK_LOOKUP("gsbi_qup_clk",	gsbi12_qup_clk.c,	"msm_dsps"),
+	CLK_LOOKUP("core_clk",		gsbi12_qup_clk.c,	"qup_i2c.5"),
+	CLK_LOOKUP("core_clk",		pdm_clk.c,		""),
+	CLK_LOOKUP("mem_clk",		pmem_clk.c,		"msm_dsps"),
+	CLK_LOOKUP("core_clk",		prng_clk.c,	"msm_rng.0"),
+	CLK_LOOKUP("core_clk",		sdc1_clk.c, "msm_sdcc.1"),
+	CLK_LOOKUP("core_clk",		sdc2_clk.c, "msm_sdcc.2"),
+	CLK_LOOKUP("core_clk",		sdc3_clk.c, "msm_sdcc.3"),
+	CLK_LOOKUP("core_clk",		sdc4_clk.c, "msm_sdcc.4"),
+	CLK_LOOKUP("core_clk",		sdc5_clk.c, "msm_sdcc.5"),
+	CLK_LOOKUP("ref_clk",		tsif_ref_clk.c,		"msm_tsif.0"),
+	CLK_LOOKUP("ref_clk",		tsif_ref_clk.c,		"msm_tsif.1"),
+	CLK_LOOKUP("core_clk",		tssc_clk.c,		""),
+	CLK_LOOKUP("alt_core_clk",	usb_hs1_xcvr_clk.c,	"msm_otg"),
+	CLK_LOOKUP("phy_clk",		usb_phy0_clk.c,		"msm_otg"),
+	CLK_LOOKUP("alt_core_clk",	usb_fs1_xcvr_clk.c,	""),
+	CLK_LOOKUP("sys_clk",		usb_fs1_sys_clk.c,	""),
+	CLK_LOOKUP("src_clk",		usb_fs1_src_clk.c,	""),
+	CLK_LOOKUP("alt_core_clk",	usb_fs2_xcvr_clk.c,	""),
+	CLK_LOOKUP("sys_clk",		usb_fs2_sys_clk.c,	""),
+	CLK_LOOKUP("src_clk",		usb_fs2_src_clk.c,	""),
+	CLK_LOOKUP("core_clk",		ce2_p_clk.c,		"qce.0"),
+	CLK_LOOKUP("core_clk",		ce2_p_clk.c,		"qcrypto.0"),
+#if defined (CONFIG_LGE_TOUCHSCREEN_SYNAPTICS_RMI4_I2C) /*                                                       */
+	CLK_LOOKUP("iface_clk",		gsbi1_p_clk.c,		"qup_i2c.10"),
+#else
+	CLK_LOOKUP("iface_clk",		gsbi1_p_clk.c,		"spi_qsd.0"),
+#endif
+	CLK_LOOKUP("iface_clk",		gsbi2_p_clk.c,		""),
+	CLK_LOOKUP("iface_clk",		gsbi3_p_clk.c, "msm_serial_hsl.2"),
+	CLK_LOOKUP("iface_clk",		gsbi3_p_clk.c,		"qup_i2c.0"),
+	CLK_LOOKUP("iface_clk",		gsbi4_p_clk.c,		"qup_i2c.1"),
+#ifdef CONFIG_LGE_FUEL_GAUGE /*                                                       */
+	CLK_LOOKUP("iface_clk",		gsbi5_p_clk.c,		"qup_i2c.11"),
+#else
+	CLK_LOOKUP("iface_clk",		gsbi5_p_clk.c,		""),
+#endif
+	CLK_LOOKUP("iface_clk",		gsbi6_p_clk.c, "msm_serial_hs.0"),
+	CLK_LOOKUP("iface_clk",		gsbi7_p_clk.c,		"qup_i2c.4"),
+#if defined(CONFIG_LGE_MHL_SII9244) /*                                                       */
+	CLK_LOOKUP("iface_clk",		gsbi8_p_clk.c,		"qup_i2c.3"),
+#else
+	CLK_LOOKUP("iface_clk",		gsbi8_p_clk.c,		""),
+#endif
+	CLK_LOOKUP("iface_clk",		gsbi9_p_clk.c, "msm_serial_hsl.1"),
+	CLK_LOOKUP("iface_clk",		gsbi9_p_clk.c,		"qup_i2c.2"),
+#ifdef CONFIG_LGE_FELICA /*                                                       */
+	CLK_LOOKUP("iface_clk",		gsbi10_p_clk.c,		"msm_serial_hsl.3"),
+#else
+	CLK_LOOKUP("iface_clk",		gsbi10_p_clk.c,		"spi_qsd.1"),
+#endif
+#if defined (CONFIG_LGE_SENSOR_DCOMPASS) || defined(CONFIG_LGE_SENSOR_PROXIMITY) /*                                  */
+	CLK_LOOKUP("iface_clk",     gsbi10_p_clk.c,     "qup_i2c.9"),
+#endif
+#if defined(CONFIG_LGE_BROADCAST_TDMB) || defined(CONFIG_LGE_BROADCAST_ONESEG) /*                                                       */
+	CLK_LOOKUP("iface_clk",		gsbi11_p_clk.c,		"spi_qsd.2"),
+#else   /*                    */
+	CLK_LOOKUP("iface_clk",		gsbi11_p_clk.c,		""),
+#endif  /*                    */
+#if defined (CONFIG_LGE_WIRELESS_CHARGER_MAX8971) || defined (CONFIG_LGE_WIRELESS_CHARGER_BQ24160) /*                                                       */
+	CLK_LOOKUP("iface_clk",		gsbi11_p_clk.c,		"qup_i2c.12"),
+#else
+	CLK_LOOKUP("iface_clk",		gsbi11_p_clk.c,		""),
+#endif
+
+#if 0 /*                                        */
+	CLK_LOOKUP("iface_clk",		gsbi12_p_clk.c,		""),
+#endif
+	CLK_LOOKUP("iface_clk",		gsbi12_p_clk.c, "msm_serial_hsl.0"),
+	CLK_LOOKUP("iface_clk",		gsbi12_p_clk.c,		"qup_i2c.5"),
+	CLK_LOOKUP("iface_clk",		ppss_p_clk.c,		"msm_dsps"),
+	CLK_LOOKUP("iface_clk",		tsif_p_clk.c,		"msm_tsif.0"),
+	CLK_LOOKUP("iface_clk",		tsif_p_clk.c,		"msm_tsif.1"),
+	CLK_LOOKUP("iface_clk",		usb_fs1_p_clk.c,	""),
+	CLK_LOOKUP("iface_clk",		usb_fs2_p_clk.c,	""),
+	CLK_LOOKUP("iface_clk",		usb_hs1_p_clk.c,	"msm_otg"),
+	CLK_LOOKUP("iface_clk",		sdc1_p_clk.c, "msm_sdcc.1"),
+	CLK_LOOKUP("iface_clk",		sdc2_p_clk.c, "msm_sdcc.2"),
+	CLK_LOOKUP("iface_clk",		sdc3_p_clk.c, "msm_sdcc.3"),
+	CLK_LOOKUP("iface_clk",		sdc4_p_clk.c, "msm_sdcc.4"),
+	CLK_LOOKUP("iface_clk",		sdc5_p_clk.c, "msm_sdcc.5"),
+	CLK_LOOKUP("mem_clk",		ebi2_2x_clk.c,		""),
+	CLK_LOOKUP("mem_clk",		ebi2_clk.c,		"msm_ebi2"),
+	CLK_LOOKUP("core_clk",		adm0_clk.c, "msm_dmov.0"),
+	CLK_LOOKUP("iface_clk",		adm0_p_clk.c, "msm_dmov.0"),
+	CLK_LOOKUP("core_clk",		adm1_clk.c, "msm_dmov.1"),
+	CLK_LOOKUP("iface_clk",		adm1_p_clk.c, "msm_dmov.1"),
+	CLK_LOOKUP("iface_clk",		modem_ahb1_p_clk.c,	""),
+	CLK_LOOKUP("iface_clk",		modem_ahb2_p_clk.c,	""),
+	CLK_LOOKUP("iface_clk",		pmic_arb0_p_clk.c,	""),
+	CLK_LOOKUP("iface_clk",		pmic_arb1_p_clk.c,	""),
+	CLK_LOOKUP("core_clk",		pmic_ssbi2_clk.c,	""),
+	CLK_LOOKUP("mem_clk",		rpm_msg_ram_p_clk.c,	""),
+	CLK_LOOKUP("cam_clk",		cam_clk.c,		NULL),
+	CLK_LOOKUP("csi_clk",		csi0_clk.c,		NULL),
+#ifdef CONFIG_LGE_CAMERA /*                                                       */
+#if defined (CONFIG_LGE_SENSOR_MT9M114)
+	// mo2jonghoo.lee 2013.01.14 CLK_LOOKUP("csi_clk",		csi1_clk.c, "msm_camera_mt9m114.0"),
+	CLK_LOOKUP("csi_clk",		csi1_clk.c, "msm_csic.1"), // mo2jonghoo.lee 2013.01.14
+#elif defined (CONFIG_LGE_SENSOR_MT9V113)
+	CLK_LOOKUP("csi_clk",		csi1_clk.c, "msm_camera_mt9v113.0"),
+#endif
+#else
+	CLK_LOOKUP("csi_clk",		csi0_clk.c, "msm_csic.0"),
+	CLK_LOOKUP("csi_clk",		csi1_clk.c, "msm_camera_ov7692.0"),
+	CLK_LOOKUP("csi_clk",		csi1_clk.c, "msm_camera_ov9726.0"),
+	CLK_LOOKUP("csi_clk",		csi1_clk.c, "msm_csic.1"),
+#endif
+	CLK_LOOKUP("csi_src_clk",	csi_src_clk.c,		NULL),
+	CLK_LOOKUP("byte_clk",	dsi_byte_clk.c,		"mipi_dsi.1"),
+	CLK_LOOKUP("esc_clk",	dsi_esc_clk.c,		"mipi_dsi.1"),
+	CLK_LOOKUP("core_clk",		gfx2d0_clk.c,	"kgsl-2d0.0"),
+	CLK_LOOKUP("core_clk",		gfx2d0_clk.c,	"footswitch-8x60.0"),
+	CLK_LOOKUP("core_clk",		gfx2d1_clk.c,	"kgsl-2d1.1"),
+	CLK_LOOKUP("core_clk",		gfx2d1_clk.c,	"footswitch-8x60.1"),
+	CLK_LOOKUP("core_clk",		gfx3d_clk.c,	"kgsl-3d0.0"),
+	CLK_LOOKUP("core_clk",		gfx3d_clk.c,	"footswitch-8x60.2"),
+	CLK_LOOKUP("core_clk",		ijpeg_clk.c,	"msm_gemini.0"),
+	CLK_LOOKUP("core_clk",		ijpeg_clk.c,	"footswitch-8x60.3"),
+	CLK_LOOKUP("core_clk",		jpegd_clk.c,		NULL),
+	CLK_LOOKUP("core_clk",		mdp_clk.c,		"mdp.0"),
+	CLK_LOOKUP("core_clk",		mdp_clk.c,	"footswitch-8x60.4"),
+	CLK_LOOKUP("vsync_clk",	mdp_vsync_clk.c,		"mdp.0"),
+	CLK_LOOKUP("vsync_clk",		mdp_vsync_clk.c, "footswitch-8x60.4"),
+	CLK_LOOKUP("lcdc_clk",	pixel_lcdc_clk.c,		"lcdc.0"),
+	CLK_LOOKUP("pixel_lcdc_clk",	pixel_lcdc_clk.c, "footswitch-8x60.4"),
+	CLK_LOOKUP("mdp_clk",	pixel_mdp_clk.c,	"lcdc.0"),
+	CLK_LOOKUP("pixel_mdp_clk",	pixel_mdp_clk.c, "footswitch-8x60.4"),
+	CLK_LOOKUP("core_clk",		rot_clk.c,	"msm_rotator.0"),
+	CLK_LOOKUP("core_clk",		rot_clk.c,	"footswitch-8x60.6"),
+	CLK_LOOKUP("tv_enc_clk",	tv_enc_clk.c,		NULL),
+	CLK_LOOKUP("tv_dac_clk",	tv_dac_clk.c,		NULL),
+	CLK_LOOKUP("core_clk",		vcodec_clk.c,	"msm_vidc.0"),
+	CLK_LOOKUP("core_clk",		vcodec_clk.c,	"footswitch-8x60.7"),
+	CLK_LOOKUP("mdp_clk",	mdp_tv_clk.c,		"dtv.0"),
+	CLK_LOOKUP("tv_clk",		mdp_tv_clk.c,	"footswitch-8x60.4"),
+	CLK_LOOKUP("hdmi_clk",		hdmi_tv_clk.c,	"dtv.0"),
+	CLK_LOOKUP("src_clk",	tv_src_clk.c,	"dtv.0"),
+	CLK_LOOKUP("tv_src_clk",	tv_src_clk.c,	"footswitch-8x60.4"),
+	CLK_LOOKUP("core_clk",		hdmi_app_clk.c,	"hdmi_msm.1"),
+	CLK_LOOKUP("vpe_clk",		vpe_clk.c,		NULL),
+	CLK_LOOKUP("core_clk",		vpe_clk.c,	"footswitch-8x60.9"),
+	CLK_LOOKUP("csi_vfe_clk",	csi0_vfe_clk.c,		NULL),
+#ifdef CONFIG_LGE_CAMERA /*                                                       */
+#if defined (CONFIG_LGE_SENSOR_MT9M114)
+	// mo2jonghoo.lee 2013.01.14 CLK_LOOKUP("csi_vfe_clk",	csi1_vfe_clk.c, "msm_camera_mt9m114.0"),
+	CLK_LOOKUP("csi_vfe_clk",	csi1_vfe_clk.c, "msm_csic.1"), // mo2jonghoo.lee 2013.01.14
+#elif defined (CONFIG_LGE_SENSOR_MT9V113)
+	CLK_LOOKUP("csi_vfe_clk",	csi1_vfe_clk.c, "msm_camera_mt9v113.0"),
+#endif
+#else
+	CLK_LOOKUP("csi_vfe_clk",	csi1_vfe_clk.c, "msm_camera_ov7692.0"),
+	CLK_LOOKUP("csi_vfe_clk",	csi1_vfe_clk.c, "msm_camera_ov9726.0"),
+	CLK_LOOKUP("csi_vfe_clk",	csi0_vfe_clk.c, "msm_csic.0"),
+	CLK_LOOKUP("csi_vfe_clk",	csi1_vfe_clk.c, "msm_csic.1"),
+#endif
+	CLK_LOOKUP("vfe_clk",		vfe_clk.c,		NULL),
+	CLK_LOOKUP("core_clk",		vfe_clk.c,	"footswitch-8x60.8"),
+	CLK_LOOKUP("bus_clk",		vfe_axi_clk.c,	"footswitch-8x60.8"),
+	CLK_LOOKUP("bus_clk",		ijpeg_axi_clk.c, "footswitch-8x60.3"),
+	CLK_LOOKUP("mem_clk",		imem_axi_clk.c,	"kgsl-3d0.0"),
+	CLK_LOOKUP("bus_clk",		mdp_axi_clk.c,	 "footswitch-8x60.4"),
+	CLK_LOOKUP("bus_clk",		rot_axi_clk.c,	 "footswitch-8x60.6"),
+	CLK_LOOKUP("bus_clk",		vcodec_axi_clk.c, "footswitch-8x60.7"),
+	CLK_LOOKUP("bus_clk",		vpe_axi_clk.c,	 "footswitch-8x60.9"),
+	CLK_LOOKUP("arb_clk",		amp_p_clk.c,		"mipi_dsi.1"),
+	CLK_LOOKUP("csi_pclk",		csi0_p_clk.c,		NULL),
+#ifdef CONFIG_LGE_CAMERA /*                                                       */
+#if defined (CONFIG_LGE_SENSOR_MT9M114)
+	// mo2jonghoo.lee 2013.01.14 CLK_LOOKUP("csi_pclk",		csi1_p_clk.c, "msm_camera_mt9m114.0"),
+	CLK_LOOKUP("csi_pclk",		csi1_p_clk.c, "msm_csic.1"), // mo2jonghoo.lee 2013.01.14
+#elif defined (CONFIG_LGE_SENSOR_MT9V113)
+	CLK_LOOKUP("csi_pclk",      csi1_p_clk.c, "msm_camera_mt9v113.0"),
+#endif
+#else
+	CLK_LOOKUP("csi_pclk",		csi0_p_clk.c, "msm_csic.0"),
+	CLK_LOOKUP("csi_pclk",		csi1_p_clk.c, "msm_camera_ov7692.0"),
+	CLK_LOOKUP("csi_pclk",		csi1_p_clk.c, "msm_camera_ov9726.0"),
+	CLK_LOOKUP("csi_pclk",		csi1_p_clk.c, "msm_csic.1"),
+#endif
+	CLK_LOOKUP("master_iface_clk",	dsi_m_p_clk.c,		"mipi_dsi.1"),
+	CLK_LOOKUP("slave_iface_clk",	dsi_s_p_clk.c,		"mipi_dsi.1"),
+	CLK_LOOKUP("iface_clk",		gfx2d0_p_clk.c,	"kgsl-2d0.0"),
+	CLK_LOOKUP("iface_clk",		gfx2d0_p_clk.c,	"footswitch-8x60.0"),
+	CLK_LOOKUP("iface_clk",		gfx2d1_p_clk.c,	"kgsl-2d1.1"),
+	CLK_LOOKUP("iface_clk",		gfx2d1_p_clk.c,	"footswitch-8x60.1"),
+	CLK_LOOKUP("iface_clk",		gfx3d_p_clk.c,	"kgsl-3d0.0"),
+	CLK_LOOKUP("iface_clk",		gfx3d_p_clk.c,	"footswitch-8x60.2"),
+	CLK_LOOKUP("master_iface_clk",	hdmi_m_p_clk.c,	"hdmi_msm.1"),
+	CLK_LOOKUP("slave_iface_clk",	hdmi_s_p_clk.c,	"hdmi_msm.1"),
+	CLK_LOOKUP("iface_clk",		ijpeg_p_clk.c,	"msm_gemini.0"),
+	CLK_LOOKUP("iface_clk",		ijpeg_p_clk.c,	"footswitch-8x60.3"),
+	CLK_LOOKUP("iface_clk",		jpegd_p_clk.c,		NULL),
+	CLK_LOOKUP("mem_iface_clk",	imem_p_clk.c,	"kgsl-3d0.0"),
+	CLK_LOOKUP("iface_clk",		mdp_p_clk.c,		"mdp.0"),
+	CLK_LOOKUP("iface_clk",		mdp_p_clk.c,	"footswitch-8x60.4"),
+	CLK_LOOKUP("iface_clk",		smmu_p_clk.c,	"msm_iommu"),
+	CLK_LOOKUP("iface_clk",		rot_p_clk.c,	"msm_rotator.0"),
+	CLK_LOOKUP("iface_clk",		rot_p_clk.c,	"footswitch-8x60.6"),
+	CLK_LOOKUP("tv_enc_pclk",	tv_enc_p_clk.c,		NULL),
+	CLK_LOOKUP("iface_clk",		vcodec_p_clk.c,	"msm_vidc.0"),
+	CLK_LOOKUP("iface_clk",		vcodec_p_clk.c, "footswitch-8x60.7"),
+	CLK_LOOKUP("vfe_pclk",		vfe_p_clk.c,		NULL),
+	CLK_LOOKUP("iface_clk",		vfe_p_clk.c,	"footswitch-8x60.8"),
+	CLK_LOOKUP("vpe_pclk",		vpe_p_clk.c,		NULL),
+	CLK_LOOKUP("iface_clk",		vpe_p_clk.c,	"footswitch-8x60.9"),
+	CLK_LOOKUP("mi2s_osr_clk",	mi2s_osr_clk.c,		NULL),
+	CLK_LOOKUP("mi2s_bit_clk",	mi2s_bit_clk.c,		NULL),
+	CLK_LOOKUP("i2s_mic_osr_clk",	codec_i2s_mic_osr_clk.c,	NULL),
+	CLK_LOOKUP("i2s_mic_bit_clk",	codec_i2s_mic_bit_clk.c,	NULL),
+	CLK_LOOKUP("i2s_mic_osr_clk",	spare_i2s_mic_osr_clk.c,	NULL),
+	CLK_LOOKUP("i2s_mic_bit_clk",	spare_i2s_mic_bit_clk.c,	NULL),
+	CLK_LOOKUP("i2s_spkr_osr_clk",	codec_i2s_spkr_osr_clk.c,	NULL),
+	CLK_LOOKUP("i2s_spkr_bit_clk",	codec_i2s_spkr_bit_clk.c,	NULL),
+	CLK_LOOKUP("i2s_spkr_osr_clk",	spare_i2s_spkr_osr_clk.c,	NULL),
+	CLK_LOOKUP("i2s_spkr_bit_clk",	spare_i2s_spkr_bit_clk.c,	NULL),
+	CLK_LOOKUP("pcm_clk",		pcm_clk.c,		NULL),
+	CLK_LOOKUP("core_clk",		jpegd_axi_clk.c,	"msm_iommu.0"),
+	CLK_LOOKUP("core_clk",		vpe_axi_clk.c,		"msm_iommu.1"),
+	CLK_LOOKUP("core_clk",		mdp_axi_clk.c,		"msm_iommu.2"),
+	CLK_LOOKUP("core_clk",		mdp_axi_clk.c,		"msm_iommu.3"),
+	CLK_LOOKUP("core_clk",		rot_axi_clk.c,		"msm_iommu.4"),
+	CLK_LOOKUP("core_clk",		ijpeg_axi_clk.c,	"msm_iommu.5"),
+	CLK_LOOKUP("core_clk",		vfe_axi_clk.c,		"msm_iommu.6"),
+	CLK_LOOKUP("core_clk",		vcodec_axi_clk.c,	"msm_iommu.7"),
+	CLK_LOOKUP("core_clk",		vcodec_axi_clk.c,	"msm_iommu.8"),
+	CLK_LOOKUP("core_clk",		gfx3d_clk.c,		"msm_iommu.9"),
+	CLK_LOOKUP("core_clk",		gfx2d0_clk.c,		"msm_iommu.10"),
+	CLK_LOOKUP("core_clk",		gfx2d1_clk.c,		"msm_iommu.11"),
+
+	CLK_LOOKUP("mdp_iommu_clk", mdp_axi_clk.c,	"msm_vidc.0"),
+	CLK_LOOKUP("rot_iommu_clk",	rot_axi_clk.c,	"msm_vidc.0"),
+	CLK_LOOKUP("vcodec_iommu0_clk", vcodec_axi_clk.c, "msm_vidc.0"),
+	CLK_LOOKUP("vcodec_iommu1_clk", vcodec_axi_clk.c, "msm_vidc.0"),
+	CLK_LOOKUP("smmu_iface_clk", smmu_p_clk.c,	"msm_vidc.0"),
+	CLK_LOOKUP("core_clk",		vcodec_axi_clk.c,  "pil_vidc"),
+	CLK_LOOKUP("smmu_iface_clk",	smmu_p_clk.c,  "pil_vidc"),
+
+	CLK_LOOKUP("dfab_dsps_clk",	dfab_dsps_clk.c, NULL),
+	CLK_LOOKUP("core_clk",		dfab_usb_hs_clk.c,	"msm_otg"),
+	CLK_LOOKUP("bus_clk",		dfab_sdc1_clk.c, "msm_sdcc.1"),
+	CLK_LOOKUP("bus_clk",		dfab_sdc2_clk.c, "msm_sdcc.2"),
+	CLK_LOOKUP("bus_clk",		dfab_sdc3_clk.c, "msm_sdcc.3"),
+	CLK_LOOKUP("bus_clk",		dfab_sdc4_clk.c, "msm_sdcc.4"),
+	CLK_LOOKUP("bus_clk",		dfab_sdc5_clk.c, "msm_sdcc.5"),
+	CLK_LOOKUP("bus_clk",		dfab_scm_clk.c,	"scm"),
+	CLK_LOOKUP("bus_clk",		dfab_qseecom_clk.c,	"qseecom"),
+
+	CLK_LOOKUP("mem_clk",		ebi1_adm0_clk.c, "msm_dmov.0"),
+	CLK_LOOKUP("mem_clk",		ebi1_adm1_clk.c, "msm_dmov.1"),
+	CLK_LOOKUP("mem_clk",		ebi1_acpu_a_clk.c, ""),
+	CLK_LOOKUP("bus_clk",		afab_acpu_a_clk.c, ""),
+
+	CLK_LOOKUP("sc0_mclk",		sc0_m_clk, ""),
+	CLK_LOOKUP("sc1_mclk",		sc1_m_clk, ""),
+	CLK_LOOKUP("l2_mclk",		l2_m_clk,  ""),
+};
+#endif /*                                                                                 */
 
 /*
  * Miscellaneous clock register initializations
@@ -3873,7 +4307,11 @@ static int __init msm8660_clock_late_init(void)
 	int rc;
 
 	/* Vote for MMFPB to be at least 64MHz when an Apps CPU is active. */
+#if 0 /*                                                          */
 	struct clk *mmfpb_a_clk = clk_get(NULL, "mmfpb_a_clk");
+#else
+	struct clk *mmfpb_a_clk = clk_get_sys("clock-8x60", "mmfpb_a_clk");
+#endif
 	if (WARN(IS_ERR(mmfpb_a_clk), "mmfpb_a_clk not found (%ld)\n",
 			PTR_ERR(mmfpb_a_clk)))
 		return PTR_ERR(mmfpb_a_clk);

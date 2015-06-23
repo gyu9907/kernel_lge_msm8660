@@ -2930,7 +2930,7 @@ static void vfe31_process_camif_sof_irq(void)
 	}
 	vfe31_send_msg_no_payload(MSG_ID_SOF_ACK);
 	vfe31_ctrl->vfeFrameId++;
-	CDBG("camif_sof_irq, frameId = %d\n", vfe31_ctrl->vfeFrameId);
+//	CDBG("camif_sof_irq, frameId = %d\n", vfe31_ctrl->vfeFrameId);
 
 	if (vfe31_ctrl->sync_timer_state) {
 		if (vfe31_ctrl->sync_timer_repeat_count == 0)

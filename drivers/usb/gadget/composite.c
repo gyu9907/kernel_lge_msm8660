@@ -944,11 +944,29 @@ static int get_string(struct usb_composite_dev *cdev,
 	 * table we're told about.  These lookups are infrequent;
 	 * simpler-is-better here.
 	 */
+#ifndef CONFIG_MACH_LGE_325_BOARD_DCM	/*                                        */
 	if (composite->strings) {
 		len = lookup_string(composite->strings, buf, language, id);
 		if (len > 0)
 			return len;
 	}
+#else /* MSE-ADD-S iC Data Transfer */
+	if (composite->strings) {
+		len = lookup_string(composite->strings, buf, language, id);
+		if (len > 0) {
+			return len;
+		} else {
+			if(language == 0) {
+				language = 0x0409;
+				len = lookup_string(composite->strings, buf, language, id);
+			}
+
+			if (len > 0) {
+				return len;
+			}
+		}
+	}
+#endif /* MSE-ADD-E iC Data Traqnsfer */
 	list_for_each_entry(c, &cdev->configs, list) {
 		if (c->strings) {
 			len = lookup_string(c->strings, buf, language, id);

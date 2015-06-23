@@ -681,6 +681,7 @@ static int msm_dai_q6_hw_params(struct snd_pcm_substream *substream,
 	case SLIMBUS_1_TX:
 	case SLIMBUS_2_RX:
 	case SLIMBUS_2_TX:
+	case SLIMBUS_3_TX:
 	case SLIMBUS_4_RX:
 	case SLIMBUS_4_TX:
 		rc = msm_dai_q6_slim_bus_hw_params(params, dai,
@@ -1004,6 +1005,7 @@ static int msm_dai_q6_prepare(struct snd_pcm_substream *substream,
 		case VOICE_RECORD_TX:
 		case VOICE_RECORD_RX:
 			rc = afe_start_pseudo_port(dai->id);
+			break;
 		default:
 			rc = afe_port_start(dai->id, &dai_data->port_config,
 					    dai_data->rate);
@@ -1424,6 +1426,7 @@ static int msm_dai_q6_set_channel_map(struct snd_soc_dai *dai,
 	case SLIMBUS_0_TX:
 	case SLIMBUS_1_TX:
 	case SLIMBUS_2_TX:
+	case SLIMBUS_3_TX:
 	case SLIMBUS_4_TX:
 		/* channel number to be between 128 and 255. For RX port
 		 * use channel numbers from 138 to 144, for TX port
@@ -1851,6 +1854,7 @@ static __devinit int msm_dai_q6_dev_probe(struct platform_device *pdev)
 		break;
 	case SLIMBUS_0_TX:
 	case SLIMBUS_4_TX:
+	case SLIMBUS_3_TX:
 		rc = snd_soc_register_dai(&pdev->dev,
 				&msm_dai_q6_slimbus_tx_dai);
 		break;

@@ -249,6 +249,9 @@ struct mmc_host {
 #define MMC_CAP2_SANITIZE	(1 << 13)		/* Support Sanitize */
 #define MMC_CAP2_BKOPS		    (1 << 14)	/* BKOPS supported */
 #define MMC_CAP2_INIT_BKOPS	    (1 << 15)	/* Need to set BKOPS_EN */
+#if 1 /*                                                           */
+#define MMC_CAP2_SDIO_AL		(1 << 31)   /* for Qualcomm SDIO device ! */
+#endif
 #define MMC_CAP2_POWER_OFF_VCCQ_DURING_SUSPEND	(1 << 16)
 
 	mmc_pm_flag_t		pm_caps;	/* supported pm features */

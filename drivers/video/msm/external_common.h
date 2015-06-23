@@ -112,6 +112,10 @@
 #define HDMI_VFRMT_MAX			59
 #define HDMI_VFRMT_FORCE_32BIT		0x7FFFFFFF
 
+#if 1 /*                                                          */
+extern int ext_resolution;
+#endif
+
 struct hdmi_disp_mode_timing_type {
 	uint32	video_format;
 	uint32	active_h;
@@ -235,6 +239,9 @@ struct external_common_state_type {
 	int (*read_edid_block)(int block, uint8 *edid_buf);
 	int (*hpd_feature)(int on);
 #endif
+#ifdef CONFIG_LGE_MHL_SII9244	/*                                        */   
+	int cable_connected;
+#endif
 };
 
 /* The external interface driver needs to initialize the common state. */
@@ -268,5 +275,9 @@ ssize_t video_3d_format_2string(uint32 format, char *buf);
 
 int external_common_state_create(struct platform_device *pdev);
 void external_common_state_remove(void);
+
+#ifdef CONFIG_LGE_MHL_SII9244	/*                                        */
+extern int mhl_power_on(void);
+#endif
 
 #endif /* __EXTERNAL_COMMON_H__ */

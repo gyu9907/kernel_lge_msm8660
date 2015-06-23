@@ -30,6 +30,7 @@
 #include "devices.h"
 #include "rpm_log.h"
 #include "rpm_stats.h"
+#include "rpm_rbcpr_stats.h"
 #include "footswitch.h"
 
 #ifdef CONFIG_MSM_MPM
@@ -287,6 +288,31 @@ struct platform_device msm8930_rpm_stat_device = {
 	},
 };
 
+static struct resource msm_rpm_rbcpr_resource = {
+	.start = 0x0010CB00,
+	.end = 0x0010CB00 + SZ_8K - 1,
+	.flags = IORESOURCE_MEM,
+};
+
+static struct msm_rpmrbcpr_platform_data msm_rpm_rbcpr_pdata = {
+	.rbcpr_data = {
+		.upside_steps = 1,
+		.downside_steps = 2,
+		.svs_voltage = 1050000,
+		.nominal_voltage = 1162500,
+		.turbo_voltage = 1287500,
+	},
+};
+
+struct platform_device msm8930_rpm_rbcpr_device = {
+	.name = "msm_rpm_rbcpr",
+	.id = -1,
+	.dev = {
+		.platform_data = &msm_rpm_rbcpr_pdata,
+	},
+	.resource = &msm_rpm_rbcpr_resource,
+};
+
 static int msm8930_LPM_latency = 1000; /* >100 usec for WFI */
 
 struct platform_device msm8930_cpu_idle_device = {
@@ -353,6 +379,21 @@ struct platform_device msm_bus_8930_sys_fpb = {
 struct platform_device msm_bus_8930_cpss_fpb = {
 	.name  = "msm_bus_fabric",
 	.id    = MSM_BUS_FAB_CPSS_FPB,
+};
+
+struct platform_device msm8627_device_acpuclk = {
+	.name		= "acpuclk-8627",
+	.id		= -1,
+};
+
+struct platform_device msm8930_device_acpuclk = {
+	.name		= "acpuclk-8930",
+	.id		= -1,
+};
+
+struct platform_device msm8930aa_device_acpuclk = {
+	.name		= "acpuclk-8930aa",
+	.id		= -1,
 };
 
 static struct fs_driver_data gfx3d_fs_data = {

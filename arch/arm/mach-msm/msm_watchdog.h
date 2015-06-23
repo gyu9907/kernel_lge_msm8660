@@ -70,6 +70,10 @@ extern unsigned int msm_wdog_fiq_length, msm_wdog_fiq_start;
 
 #ifdef CONFIG_MSM_WATCHDOG
 void pet_watchdog(void);
+#if 1 /*                                        */
+void enable_msm_watchdog(void);
+void disable_msm_watchdog(void);
+#endif
 #else
 static inline void pet_watchdog(void) { }
 #endif

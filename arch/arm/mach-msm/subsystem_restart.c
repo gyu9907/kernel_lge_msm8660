@@ -34,10 +34,12 @@
 #include <mach/subsystem_notif.h>
 #include <mach/subsystem_restart.h>
 
-#if defined(CONFIG_LGE_CRASH_HANDLER)
+/*                            
+                         */
+#if defined(CONFIG_LGE_ERROR_HANDLER)	/*                                        */
 #include <mach/restart.h>
-#include <mach/board_lge.h>
 #endif
+
 #include "smd_private.h"
 
 struct subsys_soc_restart_order {
@@ -64,7 +66,7 @@ struct restart_log {
 };
 
 static int restart_level;
-static int enable_ramdumps = 1;
+static int enable_ramdumps;
 struct workqueue_struct *ssr_wq;
 
 static LIST_HEAD(restart_log_list);
@@ -242,9 +244,6 @@ static void do_epoch_check(struct subsys_data *subsys)
 	struct restart_log *r_log, *temp;
 	static int max_restarts_check;
 	static long max_history_time_check;
-#if defined(CONFIG_LGE_CRASH_HANDLER)
-	int ssr_magic_number = get_ssr_magic_number();
-#endif
 
 	mutex_lock(&restart_log_mutex);
 
@@ -286,14 +285,10 @@ static void do_epoch_check(struct subsys_data *subsys)
 
 	if (time_first && n >= max_restarts_check) {
 		if ((curr_time->tv_sec - time_first->tv_sec) <
-				max_history_time_check) {
-#if defined(CONFIG_LGE_CRASH_HANDLER)
-			msm_set_restart_mode(ssr_magic_number | SUB_UNAB_THD);
-#endif
-			WARN(1, "Subsystems have crashed %d times in less than "\
+				max_history_time_check)
+			panic("Subsystems have crashed %d times in less than "
 				"%ld seconds!", max_restarts_check,
 				max_history_time_check);
-		}
 	}
 
 out:
@@ -314,9 +309,6 @@ static void subsystem_restart_wq_func(struct work_struct *work)
 	int i;
 	int restart_list_count = 0;
 
-#if defined(CONFIG_LGE_CRASH_HANDLER)
-	int ssr_magic_number = get_ssr_magic_number();
-#endif
 	if (r_work->use_restart_order)
 		soc_restart_order = subsys->restart_order;
 
@@ -351,13 +343,21 @@ static void subsystem_restart_wq_func(struct work_struct *work)
 	 * sequence for these subsystems. In the latter case, panic and bail
 	 * out, since a subsystem died in its powerup sequence.
 	 */
-	if (!mutex_trylock(powerup_lock)) {
-#if defined(CONFIG_LGE_CRASH_HANDLER)
-		msm_set_restart_mode(ssr_magic_number | SUB_THD_F_PWR);
-#endif
-		WARN(1, "%s[%p]: Subsystem died during powerup!",
+#if 0 /*                                        */
+	if (!mutex_trylock(powerup_lock))
+		panic("%s[%p]: Subsystem died during powerup!",
 						__func__, current);
+#else
+	if (!mutex_trylock(powerup_lock)) {
+		/*                            
+                           */
+#if defined(CONFIG_LGE_ERROR_HANDLER)
+		msm_set_restart_mode(SUB_THD_F_PWR);
+#endif
+		panic("%s[%p]: Subsystem died during powerup!",
+				__func__, current);
 	}
+#endif
 
 	do_epoch_check(subsys);
 
@@ -382,13 +382,21 @@ static void subsystem_restart_wq_func(struct work_struct *work)
 		pr_info("[%p]: Shutting down %s\n", current,
 			restart_list[i]->name);
 
-		if (restart_list[i]->shutdown(subsys) < 0) {
-#if defined(CONFIG_LGE_CRASH_HANDLER)
-			msm_set_restart_mode(ssr_magic_number | SUB_THD_F_SD);
-#endif
-			WARN(1, "subsys-restart: %s[%p]: Failed to shutdown %s!",
+#if 0 /*                                        */
+		if (restart_list[i]->shutdown(subsys) < 0)
+			panic("subsys-restart: %s[%p]: Failed to shutdown %s!",
 				__func__, current, restart_list[i]->name);
+#else
+		if (restart_list[i]->shutdown(subsys) < 0) {
+			/*                            
+                            */
+#if defined(CONFIG_LGE_ERROR_HANDLER)
+			msm_set_restart_mode(SUB_THD_F_SD);
+#endif
+			panic("subsys-restart: %s[%p]: Failed to shutdown %s!",
+					__func__, current, restart_list[i]->name);
 		}
+#endif
 	}
 
 	_send_notification_to_order(restart_list, restart_list_count,
@@ -405,6 +413,13 @@ static void subsystem_restart_wq_func(struct work_struct *work)
 	for (i = 0; i < restart_list_count; i++) {
 		if (!restart_list[i])
 			continue;
+
+		/*                                        */
+#if 1//                                                             
+		if (restart_level == RESET_SUBSYS_COUPLED)
+			if (strncmp(restart_list[i]->name, subsys->name, SUBSYS_NAME_MAX_LENGTH))
+				continue;
+#endif
 
 		if (restart_list[i]->ramdump)
 			if (restart_list[i]->ramdump(enable_ramdumps,
@@ -425,13 +440,21 @@ static void subsystem_restart_wq_func(struct work_struct *work)
 		pr_info("[%p]: Powering up %s\n", current,
 					restart_list[i]->name);
 
-		if (restart_list[i]->powerup(subsys) < 0) {
-#if defined(CONFIG_LGE_CRASH_HANDLER)
-			msm_set_restart_mode(ssr_magic_number | SUB_THD_F_PWR);
-#endif
-			WARN(1, "%s[%p]: Failed to powerup %s!", __func__,
+#if 0 /*                                        */
+		if (restart_list[i]->powerup(subsys) < 0)
+			panic("%s[%p]: Failed to powerup %s!", __func__,
 				current, restart_list[i]->name);
+#else
+		if (restart_list[i]->powerup(subsys) < 0) {
+			/*                            
+                            */
+#if defined(CONFIG_LGE_ERROR_HANDLER)
+			msm_set_restart_mode(SUB_THD_F_PWR);
+#endif
+			panic("%s[%p]: Failed to powerup %s!", __func__,
+					current, restart_list[i]->name);
 		}
+#endif
 	}
 
 	_send_notification_to_order(restart_list,
@@ -457,22 +480,14 @@ static void __subsystem_restart(struct subsys_data *subsys)
 {
 	struct restart_wq_data *data = NULL;
 	int rc;
-#if defined(CONFIG_LGE_CRASH_HANDLER)
-	int ssr_magic_number = get_ssr_magic_number();
-#endif
 
 	pr_debug("Restarting %s [level=%d]!\n", subsys->name,
 				restart_level);
 
 	data = kzalloc(sizeof(struct restart_wq_data), GFP_ATOMIC);
-	if (!data) {
-#if defined(CONFIG_LGE_CRASH_HANDLER)
-		msm_set_restart_mode(ssr_magic_number | SUB_UNAB_THD);
-#endif
-		pr_err("%s: Unable to allocate memory to restart %s.",
+	if (!data)
+		panic("%s: Unable to allocate memory to restart %s.",
 		      __func__, subsys->name);
-		return;
-	}
 
 	data->subsys = subsys;
 
@@ -485,21 +500,41 @@ static void __subsystem_restart(struct subsys_data *subsys)
 
 	INIT_WORK(&data->work, subsystem_restart_wq_func);
 	rc = queue_work(ssr_wq, &data->work);
+#if 0 /*                                                               */
+	if (rc < 0)
+		panic("%s: Unable to schedule work to restart %s (%d).",
+		     __func__, subsys->name, rc);
+#else	/* FIXME */
 	if (rc < 0) {
-#if defined(CONFIG_LGE_CRASH_HANDLER)
-		msm_set_restart_mode(ssr_magic_number | SUB_UNAB_THD);
+		/*                            
+                           */
+#if defined(CONFIG_LGE_ERROR_HANDLER)
+		msm_set_restart_mode(SUB_UNAB_THD);
 #endif
-		pr_err("%s: Unable to schedule work to restart %s (%d).",
+		panic("%s: Unable to schedule work to restart %s (%d).",
 		     __func__, subsys->name, rc);
 	}
+#endif
 }
+
+/*                                        */
+//                                                        
+#ifdef CONFIG_LGE_SDIO_DEBUG_CH
+// for subsystem discrimination
+enum {
+	ULS_NO_SUBSYSTEM,           // no subsystem crash was occurred.
+	ULS_SUBSYSTEM_MDM,      // mdm  subsystem crash was occurred.
+	ULS_SUBSYSTEM_MODEM,        // AP 8k modem subsystem crash was occured.
+	ULS_SUBSYSTEM_LPASS,        // AP lpass subsystem crash was occured.
+	ULS_SUBSYSTEM_OTHER     // this should not be used.
+};
+int uls_the_kind_of_subsys = ULS_NO_SUBSYSTEM;  // store current subsystem
+#endif /*                          */
+//                                                        
 
 int subsystem_restart(const char *subsys_name)
 {
 	struct subsys_data *subsys;
-#if defined(CONFIG_LGE_CRASH_HANDLER)
-	u32 ssr_magic_number;
-#endif
 
 	if (!subsys_name) {
 		pr_err("Invalid subsystem name.\n");
@@ -519,10 +554,31 @@ int subsystem_restart(const char *subsys_name)
 		return -EINVAL;
 	}
 
-#if defined(CONFIG_LGE_CRASH_HANDLER)
-	set_ssr_magic_number(subsys_name);
-	ssr_magic_number = get_ssr_magic_number();
-#endif
+	//                                                          
+#ifdef CONFIG_LGE_SDIO_DEBUG_CH 	/*                                        */
+	{
+		pr_info("subsys_name = %s", subsys_name);
+		if (strncmp("external_modem", subsys_name, 14) == 0)
+		{
+			uls_the_kind_of_subsys = ULS_SUBSYSTEM_MDM;
+		}
+		else if (strncmp("modem", subsys_name, 5) == 0)
+		{
+			uls_the_kind_of_subsys = ULS_SUBSYSTEM_MODEM;
+		}
+		else if (strncmp("lpass", subsys_name, 5) == 0)
+		{
+			uls_the_kind_of_subsys = ULS_SUBSYSTEM_LPASS;
+		}
+		else // this should not be happened.
+		{
+			uls_the_kind_of_subsys = ULS_SUBSYSTEM_OTHER;
+			pr_info("%s: Unkown subsystem: Restart sequence requested for  %s\n",
+					__func__, subsys_name);
+		}
+	}
+#endif /*                        */
+	//                                                        
 
 	switch (restart_level) {
 
@@ -532,18 +588,32 @@ int subsystem_restart(const char *subsys_name)
 		break;
 
 	case RESET_SOC:
-#if defined(CONFIG_LGE_CRASH_HANDLER)
-		msm_set_restart_mode(ssr_magic_number | SUB_RESET_SOC);
+		/*                            
+                           */
+#if defined(CONFIG_LGE_ERROR_HANDLER)	/*                                        */
+		/*                           
+                                           */
+		if (!strncmp(subsys->name, "modem", 5)) {
+			msm_set_restart_mode(SUB_RESET_SOC_8K);
+		} else if (!strncmp(subsys->name, "external_modem", 14)) {
+			msm_set_restart_mode(SUB_RESET_SOC_9K);
+		} else if (!strncmp(subsys->name, "lpass", 5)) {
+			msm_set_restart_mode(SUB_RESET_SOC_Q6);
+		} else {
+			msm_set_restart_mode(SUB_RESET_SOC);
+		}
 #endif
-		WARN(1, "subsys-restart: Resetting the SoC - %s crashed.",
+		panic("subsys-restart: Resetting the SoC - %s crashed.",
 			subsys->name);
 		break;
 
 	default:
-#if defined(CONFIG_LGE_CRASH_HANDLER)
-		msm_set_restart_mode(ssr_magic_number | SUB_UNKNOWN);
+		/*                            
+                           */
+#if defined(CONFIG_LGE_ERROR_HANDLER)	/*                                        */
+		msm_set_restart_mode(SUB_UNKNOWN);
 #endif
-		pr_err("subsys-restart: Unknown restart level!\n");
+		panic("subsys-restart: Unknown restart level!\n");
 	break;
 
 	}
@@ -621,8 +691,7 @@ static int __init ssr_init_soc_restart_orders(void)
 	}
 
 	if (cpu_is_msm8960() || cpu_is_msm8930() || cpu_is_msm8930aa() ||
-	    cpu_is_msm9615() || cpu_is_apq8064() || cpu_is_msm8627() ||
-	    cpu_is_msm8960ab()) {
+	    cpu_is_msm9615() || cpu_is_apq8064() || cpu_is_msm8627()) {
 		if (socinfo_get_platform_subtype() == PLATFORM_SUBTYPE_SGLTE) {
 			restart_orders = restart_orders_8960_sglte;
 			n_restart_orders =
@@ -647,16 +716,18 @@ static int __init ssr_init_soc_restart_orders(void)
 
 static int __init subsys_restart_init(void)
 {
+	int ret = 0;
+
 	restart_level = RESET_SOC;
 
 	ssr_wq = alloc_workqueue("ssr_wq", 0, 0);
 
-	if (!ssr_wq) {
-		pr_err("%s: out of memory\n", __func__);
-		return -ENOMEM;
-	}
+	if (!ssr_wq)
+		panic("Couldn't allocate workqueue for subsystem restart.\n");
 
-	return ssr_init_soc_restart_orders();
+	ret = ssr_init_soc_restart_orders();
+
+	return ret;
 }
 
 arch_initcall(subsys_restart_init);

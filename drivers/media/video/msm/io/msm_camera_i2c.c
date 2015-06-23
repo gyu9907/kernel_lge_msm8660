@@ -9,6 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+#define SENSOR_DEBUG 0
 
 #include "msm_camera_i2c.h"
 
@@ -267,43 +268,29 @@ int32_t msm_camera_i2c_poll(struct msm_camera_i2c_client *client,
 	return rc;
 }
 
-int32_t msm_camera_i2c_write_table_w_microdelay(
-	struct msm_camera_i2c_client *client,
-	struct msm_camera_i2c_reg_tbl *reg_tbl, uint16_t size,
-	enum msm_camera_i2c_data_type data_type)
-{
-	int i;
-	int32_t rc = -EFAULT;
-
-	if (!client || !reg_tbl)
-		return rc;
-
-	if ((client->addr_type != MSM_CAMERA_I2C_BYTE_ADDR
-		&& client->addr_type != MSM_CAMERA_I2C_WORD_ADDR)
-		|| (data_type != MSM_CAMERA_I2C_BYTE_DATA
-		&& data_type != MSM_CAMERA_I2C_WORD_DATA))
-		return rc;
-
-	for (i = 0; i < size; i++) {
-		rc = msm_camera_i2c_write(client, reg_tbl->reg_addr,
-			reg_tbl->reg_data, data_type);
-		if (rc < 0)
-			break;
-		if (reg_tbl->delay)
-			usleep_range(reg_tbl->delay, reg_tbl->delay + 1000);
-		reg_tbl++;
-	}
-	return rc;
-}
-
 int32_t msm_camera_i2c_write_tbl(struct msm_camera_i2c_client *client,
 	struct msm_camera_i2c_reg_conf *reg_conf_tbl, uint16_t size,
 	enum msm_camera_i2c_data_type data_type)
 {
 	int i;
 	int32_t rc = -EFAULT;
+
+//                                                      
+#if defined(CONFIG_LGE_CAMERA)
+	if (size == 0) rc = 0;
+#endif
+//                                                      
+
 	for (i = 0; i < size; i++) {
 		enum msm_camera_i2c_data_type dt;
+//                                                      
+#if defined(CONFIG_LGE_CAMERA) && defined(CONFIG_LGE_SENSOR_MT9M114) && defined(CONFIG_MSM_CAMERA_V4L2)
+		if (reg_conf_tbl->cmd_type == MSM_CAMERA_I2C_CMD_SLEEP) {
+			msleep(reg_conf_tbl->reg_data);
+			rc = 0;
+		} else
+#endif
+//                                                      
 		if (reg_conf_tbl->cmd_type == MSM_CAMERA_I2C_CMD_POLL) {
 			rc = msm_camera_i2c_poll(client, reg_conf_tbl->reg_addr,
 				reg_conf_tbl->reg_data, reg_conf_tbl->dt);
@@ -485,4 +472,293 @@ int32_t msm_sensor_write_all_conf_array(struct msm_camera_i2c_client *client,
 	}
 	return rc;
 }
+
+
+#ifdef CONFIG_LGE_CAMERA
+//                                                                  
+int32_t msm_camera_i2c_txdata_manual(struct i2c_adapter *adapter, unsigned short saddr,
+				unsigned char *txdata, int length)
+{
+	struct i2c_msg msg[] = {
+		{
+			.addr = saddr << 1,
+			.flags = 0,
+			.len = length,
+			.buf = txdata,
+		 },
+	};
+
+	if (i2c_transfer(adapter, msg, 1) < 0){
+		pr_err("msm_camera_i2c_txdata_manual faild 0x%x\n", saddr);
+		return -EIO;
+	}
+	return 0;
+}
+//                                                                 
+
+//                                                       
+int32_t msm_camera_i2c_rxdata_manual(struct i2c_adapter *adapter, uint16_t saddr,
+	unsigned char *rxdata, int data_length)
+{
+	int32_t rc = 0;
+	//uint16_t saddr = dev_client->client->addr >> 1;
+	struct i2c_msg msgs[] = {
+		{
+			.addr  = saddr,
+			.flags = 0,
+			.len   = data_length, //dev_client->addr_type,
+			.buf   = rxdata,
+		},
+		{
+			.addr  = saddr,
+			.flags = I2C_M_RD,
+			.len   = data_length,
+			.buf   = rxdata,
+		},
+	};
+	rc = i2c_transfer(adapter, msgs, 2);
+	if (rc < 0)
+		S_I2C_DBG("msm_camera_i2c_rxdata_manual failed 0x%x\n", saddr);
+	return rc;
+}
+#endif //                 
+//                                                      
+
+#if defined(CONFIG_LGE_CAMERA) && defined(CONFIG_LGE_SENSOR_MT9M114) && defined(CONFIG_MSM_CAMERA_V4L2)
+int32_t msm_camera_i2c_write_tbl_114(struct msm_camera_i2c_client *client,
+	struct msm_camera_i2c_reg_conf *reg_conf_tbl, uint16_t size,
+	enum msm_camera_i2c_data_type data_type)
+	{
+		int i;
+		int32_t rc = -EFAULT;
+
+		for (i = 0; i < size; i++) {
+			if(reg_conf_tbl->reg_addr == 0xFFFF)
+			{
+				msleep(reg_conf_tbl->reg_data);
+				rc = 0;
+			}
+			else if(reg_conf_tbl->reg_addr == 0xFFFE)
+			{
+				unsigned short test_data = 0;
+
+				for(i=0; i<50; i++){ // max delay ==> 500 ms
+					rc	= mt9m114_i2c_read(client, 0x0080, &test_data, MSM_CAMERA_I2C_WORD_ADDR);
+					if (rc < 0)
+						return rc;
+
+
+					if((test_data & reg_conf_tbl->reg_data)==0)
+						break;
+					else
+						mdelay(1); // 10 > 1
+
+					S_I2C_DBG("### %s :  Polling set, 0x0080 Reg : 0x%x\n", __func__, test_data);
+				}
+			}
+			else if(reg_conf_tbl->reg_addr == 0x301A)
+			{
+				unsigned short test_data = 0;
+
+				rc	= mt9m114_i2c_read(client, 0x301A, &test_data, MSM_CAMERA_I2C_WORD_ADDR);
+				if (rc < 0)
+					return rc;
+
+				rc = mt9m114_i2c_write_w_sensor(client,0x301A, test_data|0x0200);
+				if (rc < 0)
+					return rc;
+
+				S_I2C_DBG("### %s : Reset reg check, 0x301A Reg : 0x%x\n", __func__, test_data|0x0200);
+			}
+			else if((reg_conf_tbl->reg_addr == 0x0080)&&((reg_conf_tbl->reg_data == 0x8000)||(reg_conf_tbl->reg_data == 0x0001)))
+			{
+				unsigned short test_data = 0;
+
+				rc	= mt9m114_i2c_read(client, 0x0080, &test_data, MSM_CAMERA_I2C_WORD_ADDR);
+				if (rc < 0)
+					return rc;
+
+				test_data = test_data|reg_conf_tbl->reg_data;
+				rc = mt9m114_i2c_write_w_sensor(client,0x0080, test_data);
+				if (rc < 0)
+					return rc;
+
+				S_I2C_DBG("### %s : Patch check, 0x0080 Reg : 0x%x\n", __func__, test_data);
+			}
+			else
+			{
+				rc = mt9m114_i2c_write_w_sensor(client,reg_conf_tbl->reg_addr, reg_conf_tbl->reg_data);
+				if (rc < 0)
+					return rc;
+
+			}
+
+			if (rc < 0)
+				break;
+
+			reg_conf_tbl++;
+		}
+
+		return rc;
+	}
+
+
+int32_t msm_sensor_write_conf_array_114(struct msm_camera_i2c_client *client,
+			struct msm_camera_i2c_conf_array *array, uint16_t index)
+{
+	int32_t rc;
+
+	rc = msm_camera_i2c_write_tbl_114(client,
+		(struct msm_camera_i2c_reg_conf *) array[index].conf,
+		array[index].size, array[index].data_type);
+
+	if (array[index].delay > 20)
+		msleep(array[index].delay);
+	else
+		usleep_range(array[index].delay*1000,
+					(array[index].delay+1)*1000);
+	return rc;
+}
+
+int32_t msm_sensor_write_all_conf_array_114(struct msm_camera_i2c_client *client,
+			struct msm_camera_i2c_conf_array *array, uint16_t size)
+{
+	int32_t rc = 0, i;
+	for (i = 0; i < size; i++) {
+		rc = msm_sensor_write_conf_array_114(client, array, i);
+		if (rc < 0)
+			break;
+	}
+	return rc;
+}
+
+
+int32_t mt9m114_i2c_read(struct msm_camera_i2c_client *client,
+	uint16_t raddr, unsigned short *rdata, enum msm_camera_i2c_reg_addr_type addr_type)
+{
+	int32_t rc = 0;
+	unsigned char buf[4];
+
+	if (!rdata)
+		return -EIO;
+
+	memset(buf, 0, sizeof(buf));
+
+	switch (addr_type)
+	{
+		case MSM_CAMERA_I2C_BYTE_ADDR:
+			buf[0] = (raddr & 0xFF00) >> 8;
+			buf[1] = (raddr & 0x00FF);
+			rc = mt9m114_i2c_rxdata(client,buf, 2);
+			if (rc < 0)
+				return rc;
+			*rdata = buf[0];
+			break;
+
+		case MSM_CAMERA_I2C_WORD_ADDR:
+			buf[0] = (raddr & 0xFF00)>>8;
+			buf[1] = (raddr & 0x00FF);
+			rc = mt9m114_i2c_rxdata(client,buf, 2);
+			if (rc < 0)
+				return rc;
+
+			*rdata = buf[0] << 8 | buf[1];
+			break;
+
+		default:
+			break;
+	}
+
+	if (rc < 0)
+		CDBG("mt9m114_i2c_read failed!\n");
+
+	return rc;
+}
+
+int32_t mt9m114_i2c_rxdata(struct msm_camera_i2c_client *dev_client,
+	unsigned char *rxdata, int length)
+{
+    uint16_t saddr = dev_client->client->addr >> 1;
+	struct i2c_msg msgs[] = {
+	{
+		.addr   = saddr,
+		.flags = 0,
+		.len   = 2,
+		.buf   = rxdata,
+	},
+	{
+		.addr   = saddr,
+		.flags = I2C_M_RD,
+		.len   = length,
+		.buf   = rxdata,
+	},
+	};
+
+#if SENSOR_DEBUG
+	if (length == 2)
+		printk("msm_io_i2c_r: 0x%04x 0x%04x\n",
+			*(u16 *) rxdata, *(u16 *) (rxdata + 2));
+	else if (length == 4)
+		printk("msm_io_i2c_r: 0x%04x\n", *(u16 *) rxdata);
+	else
+		printk("msm_io_i2c_r: length = %d\n", length);
+#endif
+
+	if (i2c_transfer(dev_client->client->adapter, msgs, 2) < 0) {
+		printk("mt9m114_i2c_rxdata failed!\n");
+		return -EIO;
+	}
+
+	return 0;
+}
+
+int32_t mt9m114_i2c_write_w_sensor(struct msm_camera_i2c_client *client,uint16_t waddr, uint16_t wdata)
+{
+	int32_t rc = -EIO;
+	unsigned char buf[4];
+	memset(buf, 0, sizeof(buf));
+
+	buf[0] = (waddr & 0xFF00) >> 8;
+	buf[1] = (waddr & 0x00FF);
+	buf[2] = (wdata & 0xFF00) >> 8;
+	buf[3] = (wdata & 0x00FF);
+	rc = mt9m114_i2c_txdata(client,buf, 4);
+      // printk(KERN_ERR "[### WORD_LEN check] i2c_write , addr = 0x%04x, val = 0x%04x!\n", waddr, wdata);
+
+	if (rc < 0)
+		printk("i2c_write_w failed, addr = 0x%x, val = 0x%x!\n", waddr, wdata);
+
+	return rc;
+}
+
+int32_t mt9m114_i2c_txdata(struct msm_camera_i2c_client *dev_client,
+	unsigned char *txdata, int length)
+{
+	uint16_t saddr = dev_client->client->addr >> 1;
+	struct i2c_msg msg[] = {
+		{
+			.addr = saddr,
+			.flags = 0,
+			.len = length,
+			.buf = txdata,
+		},
+	};
+
+#if SENSOR_DEBUG
+	if (length == 2)
+		CDBG("msm_io_i2c_w: 0x%04x 0x%04x\n",
+			*(u16 *) txdata, *(u16 *) (txdata + 2));
+	else if (length == 4)
+		CDBG("msm_io_i2c_w: 0x%04x\n", *(u16 *) txdata);
+	else
+		CDBG("msm_io_i2c_w: length = %d\n", length);
+#endif
+	if (i2c_transfer(dev_client->client->adapter, msg, 1) < 0) {
+		printk("mt9m114_i2c_txdata failed\n");
+		return -EIO;
+	}
+
+	return 0;
+}
+#endif
 

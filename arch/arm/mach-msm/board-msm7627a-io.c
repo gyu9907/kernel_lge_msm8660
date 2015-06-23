@@ -22,6 +22,7 @@
 #include <linux/delay.h>
 #include <linux/atmel_maxtouch.h>
 #include <linux/input/ft5x06_ts.h>
+#include <linux/leds-msm-tricolor.h>
 #include <asm/gpio.h>
 #include <asm/mach-types.h>
 #include <mach/rpc_server_handset.h>
@@ -162,32 +163,6 @@ static struct platform_device kp_pdev_8625 = {
 };
 
 #define LED_GPIO_PDM 96
-#define LED_RED_GPIO_8625 49
-#define LED_GREEN_GPIO_8625 34
-
-static struct gpio_led gpio_leds_config_8625[] = {
-	{
-		.name = "green",
-		.gpio = LED_GREEN_GPIO_8625,
-	},
-	{
-		.name = "red",
-		.gpio = LED_RED_GPIO_8625,
-	},
-};
-
-static struct gpio_led_platform_data gpio_leds_pdata_8625 = {
-	.num_leds = ARRAY_SIZE(gpio_leds_config_8625),
-	.leds = gpio_leds_config_8625,
-};
-
-static struct platform_device gpio_leds_8625 = {
-	.name          = "leds-gpio",
-	.id            = -1,
-	.dev           = {
-		.platform_data = &gpio_leds_pdata_8625,
-	},
-};
 
 #define MXT_TS_IRQ_GPIO         48
 #define MXT_TS_RESET_GPIO       26
@@ -291,16 +266,16 @@ static const u8 mxt_config_data_evt[] = {
 	/* T6 Object */
 	0, 0, 0, 0, 0, 0,
 	/* T38 Object */
-	20, 0, 0, 0, 0, 0, 0, 0,
+	20, 1, 0, 25, 9, 12, 0, 0,
 	/* T7 Object */
 	24, 12, 10,
 	/* T8 Object */
-	30, 0, 20, 20, 0, 0, 9, 45, 10, 192,
+	30, 0, 20, 20, 0, 0, 0, 0, 10, 192,
 	/* T9 Object */
-	3, 0, 0, 18, 11, 0, 16, 60, 3, 1,
-	0, 1, 1, 0, 10, 10, 10, 10, 107, 3,
-	223, 1, 0, 0, 0, 0, 0, 0, 0, 0,
-	20, 15, 0, 0, 2,
+	131, 0, 0, 18, 11, 0, 16, 70, 2, 1,
+	0, 2, 1, 62, 10, 10, 10, 10, 107, 3,
+	223, 1, 2, 2, 20, 20, 172, 40, 139, 110,
+	10, 15, 0, 0, 0,
 	/* T15 Object */
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0,
@@ -316,7 +291,7 @@ static const u8 mxt_config_data_evt[] = {
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0,
 	/* T40 Object */
-	17, 0, 0, 30, 30,
+	0, 0, 0, 0, 0,
 	/* T42 Object */
 	3, 20, 45, 40, 128, 0, 0, 0,
 	/* T46 Object */
@@ -324,12 +299,12 @@ static const u8 mxt_config_data_evt[] = {
 	/* T47 Object */
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	/* T48 Object */
-	1, 128, 96, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 6, 6, 0, 0, 63, 4, 64,
-	10, 0, 32, 5, 0, 38, 0, 8, 0, 0,
+	1, 12, 64, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 6, 6, 0, 0, 100, 4, 64,
+	10, 0, 20, 5, 0, 38, 0, 20, 0, 0,
 	0, 0, 0, 0, 16, 65, 3, 1, 1, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0,
+	10, 10, 10, 0, 0, 15, 15, 154, 58, 145,
+	80, 100, 15, 3,
 };
 
 static struct mxt_config_info mxt_config_array[] = {
@@ -772,6 +747,30 @@ static struct platform_device pmic_mpp_leds_pdev = {
 	},
 };
 
+static struct led_info tricolor_led_info[] = {
+	[0] = {
+		.name           = "red",
+		.flags          = LED_COLOR_RED,
+	},
+	[1] = {
+		.name           = "green",
+		.flags          = LED_COLOR_GREEN,
+	},
+};
+
+static struct led_platform_data tricolor_led_pdata = {
+	.leds = tricolor_led_info,
+	.num_leds = ARRAY_SIZE(tricolor_led_info),
+};
+
+static struct platform_device tricolor_leds_pdev = {
+	.name   = "msm-tricolor-leds",
+	.id     = -1,
+	.dev    = {
+		.platform_data  = &tricolor_led_pdata,
+	},
+};
+
 void __init msm7627a_add_io_devices(void)
 {
 	/* touchscreen */
@@ -823,6 +822,7 @@ void __init qrd7627a_add_io_devices(void)
 			mxt_config_array[0].config_length =
 					ARRAY_SIZE(mxt_config_data_evt);
 			mxt_platform_data.panel_maxy = 875;
+			mxt_platform_data.need_calibration = true;
 			mxt_vkey_setup();
 		}
 
@@ -868,24 +868,9 @@ void __init qrd7627a_add_io_devices(void)
 		platform_device_register(&kp_pdev_sku3);
 
 	/* leds */
-	if (machine_is_msm7627a_evb() || machine_is_msm8625_evb()) {
-		rc = gpio_tlmm_config(GPIO_CFG(LED_RED_GPIO_8625, 0,
-				GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP,
-				GPIO_CFG_16MA), GPIO_CFG_ENABLE);
-		if (rc) {
-			pr_err("%s: gpio_tlmm_config for %d failed\n",
-				__func__, LED_RED_GPIO_8625);
-		}
-
-		rc = gpio_tlmm_config(GPIO_CFG(LED_GREEN_GPIO_8625, 0,
-				GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP,
-				GPIO_CFG_16MA), GPIO_CFG_ENABLE);
-		if (rc) {
-			pr_err("%s: gpio_tlmm_config for %d failed\n",
-				__func__, LED_GREEN_GPIO_8625);
-		}
-
-		platform_device_register(&gpio_leds_8625);
+	if (machine_is_msm7627a_evb() || machine_is_msm8625_evb() ||
+						machine_is_msm8625_evt()) {
 		platform_device_register(&pmic_mpp_leds_pdev);
+		platform_device_register(&tricolor_leds_pdev);
 	}
 }

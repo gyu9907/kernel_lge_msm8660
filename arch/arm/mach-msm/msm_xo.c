@@ -15,6 +15,10 @@
 #include <linux/init.h>
 #include <linux/err.h>
 #include <linux/module.h>
+#ifdef CONFIG_BATMAN_VZW_XO_VOTER_FOR_EVDO
+#include <linux/moduleparam.h>
+#include <linux/delay.h>
+#endif
 #include <linux/mutex.h>
 #include <linux/debugfs.h>
 #include <linux/list.h>
@@ -25,6 +29,12 @@
 
 #include <mach/msm_xo.h>
 #include <mach/rpm.h>
+#ifdef CONFIG_BATMAN_VZW_XO_VOTER_FOR_EVDO
+#include <linux/syscalls.h>
+#include <linux/fcntl.h> 
+#include <linux/fs.h>
+#include <linux/uaccess.h>
+#endif
 #include <mach/socinfo.h>
 
 #include "rpm_resources.h"
@@ -45,6 +55,10 @@ struct msm_xo_voter {
 };
 
 static struct msm_xo msm_xo_sources[NUM_MSM_XO_IDS];
+
+#ifdef CONFIG_BATMAN_VZW_XO_VOTER_FOR_EVDO
+int evdo_set_status = 0;
+#endif
 
 #ifdef CONFIG_DEBUG_FS
 static const char *msm_xo_to_str[NUM_MSM_XO_IDS] = {
@@ -185,6 +199,13 @@ static int __init msm_xo_debugfs_init(void)
 static int __init msm_xo_debugfs_init(void) { return 0; }
 #endif
 
+#ifdef CONFIG_BATMAN_VZW_XO_VOTER_FOR_EVDO
+int get_evdo_set_status(void)
+{
+	return evdo_set_status;
+}
+#endif
+
 static int msm_xo_update_vote(struct msm_xo *xo)
 {
 	int ret;
@@ -235,8 +256,7 @@ static int __msm_xo_mode_vote(struct msm_xo_voter *xo_voter, unsigned mode)
 	int is_d0 = xo == &msm_xo_sources[MSM_XO_TCXO_D0];
 	int needs_workaround = cpu_is_msm8960() || cpu_is_apq8064() ||
 			       cpu_is_msm8930() || cpu_is_msm8930aa() ||
-			       cpu_is_msm9615() || cpu_is_msm8627() ||
-			       cpu_is_msm8960ab();
+			       cpu_is_msm9615() || cpu_is_msm8627();
 
 	if (xo_voter->mode == mode)
 		return 0;
@@ -370,6 +390,80 @@ void msm_xo_put(struct msm_xo_voter *xo_voter)
 }
 EXPORT_SYMBOL(msm_xo_put);
 
+#ifdef CONFIG_BATMAN_VZW_XO_VOTER_FOR_EVDO
+int msm_xo_mode_control(int on_off)  
+{
+	
+	static struct msm_xo_voter *voter;
+	int rc = 0;
+	
+	if(voter == NULL)
+		voter = msm_xo_get(MSM_XO_TCXO_D1, "evdo");
+
+	if (IS_ERR(voter)) {
+		pr_err("Failed to get XO CORE voter (%ld)\n",
+				PTR_ERR(voter));
+		goto fail;
+	}
+		
+//	pr_err("%s: msm_xo_mode is %d\n", __func__, on_off);
+	
+	if(on_off)
+	{
+		evdo_set_status = 1;
+		rc = msm_xo_mode_vote(voter, MSM_XO_MODE_ON);
+	}	
+	else
+	{
+		evdo_set_status = 0;
+		rc = msm_xo_mode_vote(voter, MSM_XO_MODE_OFF);
+	}
+	if (rc < 0) {
+		pr_err("XO Core %s failed (%d)\n",
+			on_off ? "enable" : "disable", rc);
+		goto fail_xo_mode_vote;
+	}
+//	pr_err("%s:evdo_set_status:%d\n", __func__,evdo_set_status);
+	return 0;
+fail_xo_mode_vote:
+	msm_xo_put(voter);
+fail:
+	return rc;
+}
+EXPORT_SYMBOL(msm_xo_mode_control);
+
+
+static int dummy_arg_on, dummy_arg_off;
+
+static int msm_xo_mode_on_write(const char *val, struct kernel_param *kp)
+{
+	return 0;	 
+}
+
+static int msm_xo_mode_on_read(char *buf, struct kernel_param *kp)
+{
+	int result;
+	result = msm_xo_mode_control(1);
+	sprintf(buf,"%d",result);
+	return 0;
+}
+
+static int msm_xo_mode_off_write(const char *val, struct kernel_param *kp)
+{
+	return 0;	 
+}
+
+static int msm_xo_mode_off_read(char *buf, struct kernel_param *kp)
+{ 
+	int result;
+	result = msm_xo_mode_control(0);	
+	sprintf(buf,"%d",result);
+	return 0;
+}
+
+module_param_call(msm_xo_mode_on, msm_xo_mode_on_write, msm_xo_mode_on_read, &dummy_arg_on, 0665);
+module_param_call(msm_xo_mode_off, msm_xo_mode_off_write, msm_xo_mode_off_read, &dummy_arg_off, 0665);
+#endif
 int __init msm_xo_init(void)
 {
 	int i, ret;

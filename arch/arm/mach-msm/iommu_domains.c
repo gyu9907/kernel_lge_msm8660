@@ -15,8 +15,10 @@
 #include <linux/iommu.h>
 #include <linux/memory_alloc.h>
 #include <linux/platform_device.h>
+#include <linux/vmalloc.h>
 #include <linux/rbtree.h>
 #include <linux/slab.h>
+#include <linux/vmalloc.h>
 #include <asm/sizes.h>
 #include <asm/page.h>
 #include <mach/iommu.h>
@@ -39,6 +41,11 @@ static struct rb_root domain_root;
 DEFINE_MUTEX(domain_mutex);
 static atomic_t domain_nums = ATOMIC_INIT(-1);
 
+int msm_use_iommu()
+{
+	return iommu_present(&platform_bus_type);
+}
+
 int msm_iommu_map_extra(struct iommu_domain *domain,
 				unsigned long start_iova,
 				unsigned long size,
@@ -54,7 +61,7 @@ int msm_iommu_map_extra(struct iommu_domain *domain,
 		unsigned int nrpages = PFN_ALIGN(size) >> PAGE_SHIFT;
 		struct page *dummy_page = phys_to_page(phy_addr);
 
-		sglist = kmalloc(sizeof(*sglist) * nrpages, GFP_KERNEL);
+		sglist = vmalloc(sizeof(*sglist) * nrpages);
 		if (!sglist) {
 			ret = -ENOMEM;
 			goto out;
@@ -71,7 +78,7 @@ int msm_iommu_map_extra(struct iommu_domain *domain,
 				__func__, start_iova, domain);
 		}
 
-		kfree(sglist);
+		vfree(sglist);
 	} else {
 		unsigned long order = get_order(page_size);
 		unsigned long aligned_size = ALIGN(size, page_size);
@@ -126,7 +133,7 @@ static int msm_iommu_map_iova_phys(struct iommu_domain *domain,
 	int prot = IOMMU_WRITE | IOMMU_READ;
 	prot |= cached ? IOMMU_CACHE : 0;
 
-	sglist = kmalloc(sizeof(*sglist), GFP_KERNEL);
+	sglist = vmalloc(sizeof(*sglist));
 	if (!sglist) {
 		ret = -ENOMEM;
 		goto err1;
@@ -143,7 +150,7 @@ static int msm_iommu_map_iova_phys(struct iommu_domain *domain,
 			__func__, iova, domain);
 	}
 
-	kfree(sglist);
+	vfree(sglist);
 err1:
 	return ret;
 
@@ -162,6 +169,11 @@ int msm_iommu_map_contig_buffer(unsigned long phys,
 
 	if (size & (align - 1))
 		return -EINVAL;
+
+	if (!msm_use_iommu()) {
+		*iova_val = phys;
+		return 0;
+	}
 
 	ret = msm_allocate_iova_address(domain_no, partition_no, size, align,
 						&iova);
@@ -185,6 +197,9 @@ void msm_iommu_unmap_contig_buffer(unsigned long iova,
 					unsigned int partition_no,
 					unsigned long size)
 {
+	if (!msm_use_iommu())
+		return;
+
 	iommu_unmap_range(msm_get_iommu_domain(domain_no), iova, size);
 	msm_free_iova_address(iova, domain_no, partition_no, size);
 }
@@ -386,11 +401,6 @@ out:
 	kfree(data);
 
 	return -EINVAL;
-}
-
-int msm_use_iommu()
-{
-	return iommu_present(&platform_bus_type);
 }
 
 static int __init iommu_domain_probe(struct platform_device *pdev)

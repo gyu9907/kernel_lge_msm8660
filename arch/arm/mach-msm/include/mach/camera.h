@@ -27,6 +27,7 @@
 #include <linux/ion.h>
 #include <mach/iommu_domains.h>
 
+#define CONFIG_MSM_CAMERA_DEBUG
 #ifdef CONFIG_MSM_CAMERA_DEBUG
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
 #else
@@ -459,12 +460,17 @@ static inline int msm_strobe_flash_init(
 {
 	return -ENOTSUPP;
 }
+#ifdef CONFIG_LGE_FLASH_LM3559 //                  
+int lge_flash_ctrl(struct msm_camera_sensor_info *sdata,
+			struct flash_ctrl_data *flash_info);
+#else
 static inline int msm_flash_ctrl(
 		struct msm_camera_sensor_info *sdata,
 		struct flash_ctrl_data *flash_info)
 {
 	return -ENOTSUPP;
 }
+#endif
 #endif
 
 

@@ -39,6 +39,7 @@ config ARCH_MSM7X27
 	select MSM_RUN_QUEUE_STATS if MSM_SOC_REV_A
 	select DONT_MAP_HOLE_AFTER_MEMBANK0
 	select MIGHT_HAVE_CACHE_L2X0
+	select MSM_MODEM_RESTART
 
 config ARCH_MSM7X30
 	bool "MSM7x30"
@@ -65,6 +66,7 @@ config ARCH_MSM7X30
 	select MULTI_IRQ_HANDLER
 	select MSM_PM2 if PM
 	select HOLES_IN_ZONE if SPARSEMEM
+	select MSM_MODEM_RESTART
 
 config ARCH_QSD8X50
 	bool "QSD8X50"
@@ -78,6 +80,7 @@ config ARCH_QSD8X50
 	select MSM_GPIOMUX
 	select MSM_DALRPC
 	select MSM_PM2 if PM
+	select MSM_MODEM_RESTART
 
 config ARCH_MSM8X60
 	bool "MSM8X60"
@@ -298,6 +301,7 @@ config ARCH_MSM8625
 	select ARM_TICKET_LOCKS
 	select MSM_RUN_QUEUE_STATS
 	select MIGHT_HAVE_CACHE_L2X0
+	select ARM_HAS_SG_CHAIN
 
 config ARCH_MSM9625
 	bool "MSM9625"
@@ -382,6 +386,7 @@ config ARCH_MSM7X27A
 	select ARM_GIC
 	select ARCH_MSM_CORTEXMP
 	select MIGHT_HAVE_CACHE_L2X0
+	select ARM_HAS_SG_CHAIN
 
 config  MSM_VIC
 	bool
@@ -869,12 +874,7 @@ config MACH_FSM9XXX_SURF
 	  chipset based SURF evaluation board and
 	  FFA board.
 
-config MACH_MSM_DUMMY
-	bool "NONE (No device)"
-
 endmenu
-
-source "arch/arm/mach-msm/lge/Kconfig"
 
 config MSM_STACKED_MEMORY
 	bool "Stacked Memory"
@@ -1278,8 +1278,10 @@ config MSM_SMD_DEBUG
 	  Support for debugging the SMD for communication
 	  between the ARM9 and ARM11
 
+#modified by mo2chunghan.lee@lge.com, 09/21/2012
 config MSM_SDIO_AL
-	depends on ((ARCH_MSM7X30 || MACH_MSM8X60_FUSN_FFA || MACH_TYPE_MSM8X60_FUSION) && HAS_WAKELOCK)
+#	depends on ((ARCH_MSM7X30 || MACH_MSM8X60_FUSN_FFA || MACH_TYPE_MSM8X60_FUSION) && HAS_WAKELOCK)
+	depends on ((MACH_LGE_I_BOARD || MACH_LGE_325_BOARD || MACH_MSM8X60_FUSN_FFA || MACH_TYPE_MSM8X60_FUSION) && HAS_WAKELOCK)
 	default y
 	tristate "SDIO-Abstraction-Layer"
 	help
@@ -2040,6 +2042,16 @@ config MSM_RPM_STATS_LOG
 	  the low power modes that RPM enters. The drivers outputs the message
 	  via a debugfs node.
 
+config MSM_RPM_RBCPR_STATS_LOG
+        tristate "MSM Resource Power Manager RPBCPR Stat Driver"
+        depends on DEBUG_FS
+        depends on MSM_RPM
+          help
+          This option enables a driver which reads RPM messages from a shared
+          memory location. These messages provide statistical information about
+          RBCPR (Rapid Bridge Core Power Reduction) information . The drivers
+          outputs the message via a debugfs node.
+
 config MSM_DIRECT_SCLK_ACCESS
 	bool "Direct access to the SCLK timer"
 	default n
@@ -2054,6 +2066,9 @@ config MSM_SECURE_IO
 	bool
 
 config MSM_NATIVE_RESTART
+	bool
+
+config MSM_MODEM_RESTART
 	bool
 
 config MSM_PM2
@@ -2403,6 +2418,19 @@ config MSM_DCVS
 	  algorithm and the algorithm returns a frequency for the core which is
 	  passed to the frequency change driver.
 
+config MSM_CPR
+	tristate "Use MSM CPR in S/W mode"
+	help
+	  Enable CPR (core power reduction) in S/W mode, where the processor
+	  get's the notification from CPR block and programs the PMIC.
+
+config MSM_VP_REGULATOR
+	tristate "Use MSM PMIC8029 C2 regulator"
+	depends on ARCH_MSM8625
+	help
+	  Enable MSM PMIC8029 C2 regulator support using APC_PLEVEL access
+	  for MSMs like 8625.
+
 config HAVE_ARCH_HAS_CURRENT_TIMER
 	bool
 
@@ -2438,5 +2466,31 @@ config MSM_HSIC_SYSMON_TEST
 	  This will create a debugfs file entry named "hsic_sysmon_test" which
 	  can be read and written to send character data to the sysmon port of
 	  the modem over USB.
+
+config MSM_8X60_FUSION_GPIO_GLITCH
+	tristate "Mask unexpected glitch during boot up"
+	help
+	  Enable masking of glitch during boot up, which helps in avoiding unwanted
+	  noise or s/w code from toggling the ap2mdm err fatal.
+
+#added by mo2chunghan.lee@lge.com, 09/21/2012 -----
+config LGE_SDIO_DEBUG_CH
+    bool "SDIO DEBUG CH driver"
+    depends on MSM_SDIO_AL
+    default n
+    help
+      Support Debug Channels over SDIO interface.
+#--------------------------------------------------
+
+#silent_reset_fusion2
+config LGE_SILENT_RESET
+ tristate "Support LGE Silent Reset"
+ default n
+ depends on MACH_LGE && LGE_HANDLE_PANIC
+ help
+   LGE Silent Reset
+   Enables support for LGE Silent Reset. For turn on this feature,
+	  "echo 1 > /sys/module/lge_handle_panic/parameters/sreset_enable"
+	  or "lge_handle_panic.sreset_enable=1" from cmdline.
 
 endif

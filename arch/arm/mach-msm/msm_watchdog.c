@@ -133,6 +133,44 @@ static int msm_watchdog_resume(struct device *dev)
 	return 0;
 }
 
+/*
+                                                                       
+                                                 
+                                                       
+                                                                                        
+                                   
+                                          
+  
+                                     
+                                
+                                                                         
+ */
+#if 1
+void disable_msm_watchdog(void)
+{
+	if (!enable)
+		return ;
+
+	__raw_writel(1, msm_tmr0_base + WDT0_RST);
+	__raw_writel(0, msm_tmr0_base + WDT0_EN);
+	mb();
+
+	return;
+}
+
+void enable_msm_watchdog(void)
+{
+	if (!enable)
+		return ;
+
+	__raw_writel(1, msm_tmr0_base + WDT0_EN);
+	__raw_writel(1, msm_tmr0_base + WDT0_RST);
+	mb();
+
+	return;
+}
+#endif
+
 static int panic_wdog_handler(struct notifier_block *this,
 			      unsigned long event, void *ptr)
 {

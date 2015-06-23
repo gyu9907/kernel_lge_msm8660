@@ -140,6 +140,7 @@ static struct kgsl_device_platform_data kgsl_3d0_pdata = {
 	.set_grp_async = NULL,
 	.idle_timeout = HZ/12,
 	.nap_allowed = true,
+	.strtstp_sleepwake = true,
 	.clk_map = KGSL_CLK_CORE | KGSL_CLK_IFACE | KGSL_CLK_MEM_IFACE,
 #ifdef CONFIG_MSM_BUS_SCALING
 	.bus_scale_table = &grp3d_bus_scale_pdata,
@@ -160,8 +161,8 @@ static struct platform_device device_kgsl_3d0 = {
 
 void __init msm8930_init_gpu(void)
 {
-	if (cpu_is_msm8627())
-		kgsl_3d0_pdata.pwrlevel[0].gpu_freq = 400000000;
+	if (cpu_is_msm8930aa())
+		kgsl_3d0_pdata.pwrlevel[0].gpu_freq = 450000000;
 
 	platform_device_register(&device_kgsl_3d0);
 }

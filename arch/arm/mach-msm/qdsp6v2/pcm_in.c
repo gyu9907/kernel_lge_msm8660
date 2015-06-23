@@ -47,6 +47,15 @@ struct pcm {
 	wait_queue_head_t wait;
 	spinlock_t dsp_lock;
 	struct audio_client *ac;
+
+#ifdef LVVE
+/* Copyright 2011 NXP Software, begin */
+	unsigned long bytes_read;
+	unsigned long bytes_acked; 
+	struct msm_audio_htimestamp tstamp;
+/* Copyright 2011 NXP Software, end */
+#endif
+
 	uint32_t sample_rate;
 	uint32_t channel_count;
 	uint32_t buffer_size;
@@ -101,6 +110,30 @@ static void pcm_in_allow_sleep(struct pcm *audio)
 static void pcm_in_get_dsp_buffers(struct pcm *pcm,
 				uint32_t token, uint32_t *payload)
 {
+
+#ifdef LVVE
+/* Copyright 2011 NXP Software, begin */
+	struct audio_port_data *port = &pcm->ac->port[OUT];
+
+	getnstimeofday(&pcm->tstamp.time);
+	pcm->bytes_acked += port->buf[token].actual_size;
+	
+	if(pcm->bytes_acked >= pcm->bytes_read)
+	{
+		pcm->tstamp.avail = pcm->bytes_acked - pcm->bytes_read;	
+	}
+	else
+	{
+		pcm->tstamp.avail 	= 0;
+		pcm->bytes_acked 	= 0;
+		pcm->bytes_read 	= 0;
+	}
+    /*
+	pr_err("NXP:%s() Tx_timestamp Avail=[%5lu] Secs=[%10lu] nSecs=[%9lu] bytes_acked(%lu) bytes_read(%lu) at %d in pcm_in.c Kernel \n", \
+			__func__, pcm->tstamp.avail, pcm->tstamp.time.tv_sec, pcm->tstamp.time.tv_nsec, pcm->bytes_acked, pcm->bytes_read, __LINE__);
+    */
+/* Copyright 2011 NXP Software, end */
+#endif
 	pcm->in_frame_info[token][0] = payload[7];
 	pcm->in_frame_info[token][1] = payload[3];
 	if (atomic_read(&pcm->in_count) <= pcm->buffer_count)
@@ -148,6 +181,19 @@ static int config(struct pcm *pcm)
 
 	rc = q6asm_enc_cfg_blk_pcm(pcm->ac, pcm->sample_rate,
 						pcm->channel_count);
+#ifdef LVVE
+/* Copyright 2011 NXP Software, begin */
+	pcm->tstamp.avail = 0;
+	pcm->tstamp.time.tv_nsec = 0;
+	pcm->tstamp.time.tv_sec =  0;
+	pcm->bytes_read  = 0;
+	pcm->bytes_acked = 0;
+    /*
+	pr_err("NXP: %s(): Tx_timestamp Avail=[%5lu] Secs=[%10lu] nSecs=[%9lu] bytes_read(%lu) bytes_acked(%lu)  sampling : [%d], channl_count : [%d] at [%d] in qdsp6v2/pcm_in.c  Kernel\n", \
+			__func__, pcm->tstamp.avail, pcm->tstamp.time.tv_sec, pcm->tstamp.time.tv_nsec, pcm->bytes_read, pcm->bytes_acked, pcm->sample_rate, pcm->channel_count, __LINE__);
+    */
+/* Copyright 2011 NXP Software, end */
+#endif
 	if (rc < 0) {
 		pr_err("%s: cmd media format block failed", __func__);
 		goto fail;
@@ -160,6 +206,27 @@ static long pcm_in_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct pcm *pcm = file->private_data;
 	int rc = 0;
+#ifdef LVVE
+/* Copyright 2011 NXP Software, begin */
+	struct msm_audio_htimestamp tstamp;
+	unsigned long flags = 0;
+	if (cmd == AUDIO_PCM_HTIMESTAMP)
+	{
+		//pr_err("NXP: %s(): cmd(AUDIO_PCM_HTIMESTAMP) at %d in qdsp6v2/pcm_in.c\n", __func__, __LINE__);
+
+		spin_lock_irqsave(&pcm->dsp_lock, flags);
+		tstamp.avail = pcm->tstamp.avail;
+		tstamp.time = pcm->tstamp.time;
+		spin_unlock_irqrestore(&pcm->dsp_lock, flags);
+
+		if (copy_to_user((void *) arg, &tstamp, sizeof(tstamp)))
+			rc = -EFAULT;
+		else
+			rc = 0;
+		return rc;
+	} 
+/* Copyright 2011 NXP Software, end */
+#endif
 
 	mutex_lock(&pcm->lock);
 	switch (cmd) {
@@ -223,7 +290,8 @@ static long pcm_in_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			rc = -EFAULT;
 			break;
 		}
-		pr_debug("%s: SET_CONFIG: buffer_size:%d channel_count:%d"
+//                                                                                      
+            pr_info("%s: SET_CONFIG: buffer_size:%d channel_count:%d"
 			"sample_rate:%d, buffer_count:%d\n", __func__,
 			config.buffer_size, config.channel_count,
 			config.sample_rate, config.buffer_count);
@@ -384,6 +452,17 @@ static ssize_t pcm_in_read(struct file *file, char __user *buf,
 	int rc = 0;
 	int len = 0;
 
+#ifdef LVVE
+/* Copyright 2011 NXP Software, begin */
+	unsigned long flags;
+	
+	spin_lock_irqsave(&pcm->dsp_lock, flags);
+	pcm->bytes_read += count;
+	spin_unlock_irqrestore(&pcm->dsp_lock, flags);
+
+	//pr_err(" NXP: %s(): count(%d) bytes_read(%lu) at %d in qdsp6v2/pcm_in.c\n", __func__, count, pcm->bytes_read, __LINE__);
+/* Copyright 2011 NXP Software, end */
+#endif
 	if (!atomic_read(&pcm->in_enabled))
 		return -EFAULT;
 	mutex_lock(&pcm->read_lock);

@@ -169,6 +169,7 @@ int afe_get_port_type(u16 port_id)
 	case SLIMBUS_0_TX:
 	case SLIMBUS_1_TX:
 	case SLIMBUS_2_TX:
+	case SLIMBUS_3_TX:
 	case INT_FM_TX:
 	case VOICE_RECORD_RX:
 	case INT_BT_SCO_TX:
@@ -214,6 +215,7 @@ int afe_validate_port(u16 port_id)
 	case SLIMBUS_2_RX:
 	case SLIMBUS_2_TX:
 	case SLIMBUS_3_RX:
+	case SLIMBUS_3_TX:
 	case INT_BT_SCO_RX:
 	case INT_BT_SCO_TX:
 	case INT_BT_A2DP_RX:
@@ -283,6 +285,7 @@ int afe_get_port_index(u16 port_id)
 	case SLIMBUS_2_RX: return IDX_SLIMBUS_2_RX;
 	case SLIMBUS_2_TX: return IDX_SLIMBUS_2_TX;
 	case SLIMBUS_3_RX: return IDX_SLIMBUS_3_RX;
+	case SLIMBUS_3_TX: return IDX_SLIMBUS_3_TX;
 	case INT_BT_SCO_RX: return IDX_INT_BT_SCO_RX;
 	case INT_BT_SCO_TX: return IDX_INT_BT_SCO_TX;
 	case INT_BT_A2DP_RX: return IDX_INT_BT_A2DP_RX;
@@ -319,6 +322,7 @@ int afe_sizeof_cfg_cmd(u16 port_id)
 	case SLIMBUS_2_RX:
 	case SLIMBUS_2_TX:
 	case SLIMBUS_3_RX:
+	case SLIMBUS_3_TX:
 	case SLIMBUS_4_RX:
 	case SLIMBUS_4_TX:
 		ret_size = SIZEOF_CFG_CMD(afe_port_slimbus_sch_cfg);
@@ -361,7 +365,8 @@ static void afe_send_cal_block(int32_t path, u16 port_id)
 	int						result = 0;
 	struct acdb_cal_block				cal_block;
 	struct afe_port_cmd_set_param_no_payload	afe_cal;
-	pr_debug("%s: path %d\n", __func__, path);
+//	pr_debug("%s: path %d\n", __func__, path);
+	pr_info("%s: path %d\n", __func__, path);	//                      
 
 	get_afe_cal(path, &cal_block);
 	if (cal_block.cal_size <= 0) {
@@ -440,11 +445,12 @@ int afe_port_start(u16 port_id, union afe_port_config *afe_config,
 		ret = -EINVAL;
 		return ret;
 	}
-	pr_debug("%s: %d %d\n", __func__, port_id, rate);
+//	pr_debug("%s: %d %d\n", __func__, port_id, rate);
+	pr_info("%s: %d %d\n", __func__, port_id, rate);	//                      
 
 	if ((port_id == RT_PROXY_DAI_001_RX) ||
 		(port_id == RT_PROXY_DAI_002_TX))
-		return -EINVAL;
+		return 0;
 	if ((port_id == RT_PROXY_DAI_002_RX) ||
 		(port_id == RT_PROXY_DAI_001_TX))
 		port_id = VIRTUAL_ID_TO_PORTID(port_id);
@@ -600,11 +606,12 @@ int afe_open(u16 port_id, union afe_port_config *afe_config, int rate)
 		return ret;
 	}
 
-	pr_debug("%s: %d %d\n", __func__, port_id, rate);
+//	pr_debug("%s: %d %d\n", __func__, port_id, rate);
+	pr_info("%s: %d %d\n", __func__, port_id, rate);	//                      
 
 	if ((port_id == RT_PROXY_DAI_001_RX) ||
 		(port_id == RT_PROXY_DAI_002_TX))
-		return -EINVAL;
+		return 0;
 	if ((port_id == RT_PROXY_DAI_002_RX) ||
 		(port_id == RT_PROXY_DAI_001_TX))
 		port_id = VIRTUAL_ID_TO_PORTID(port_id);
@@ -795,13 +802,14 @@ int afe_loopback_cfg(u16 enable, u16 dst_port, u16 src_port, u16 mode)
 	lp_cfg.hdr.opcode = AFE_PORT_CMD_SET_PARAM;
 
 	lp_cfg.port_id = src_port;
-	lp_cfg.payload_size	= sizeof(struct afe_param_payload);
+	lp_cfg.payload_size	= sizeof(struct afe_param_payload_base) +
+		sizeof(struct afe_param_loopback_cfg);
 	lp_cfg.payload_address	= 0;
 
-	lp_cfg.payload.module_id = AFE_MODULE_LOOPBACK;
-	lp_cfg.payload.param_id	= AFE_PARAM_ID_LOOPBACK_CONFIG;
-	lp_cfg.payload.param_size = sizeof(struct afe_param_loopback_cfg);
-	lp_cfg.payload.reserved	= 0;
+	lp_cfg.payload.base.module_id = AFE_MODULE_LOOPBACK;
+	lp_cfg.payload.base.param_id	= AFE_PARAM_ID_LOOPBACK_CONFIG;
+	lp_cfg.payload.base.param_size = sizeof(struct afe_param_loopback_cfg);
+	lp_cfg.payload.base.reserved	= 0;
 
 	lp_cfg.payload.param.loopback_cfg.loopback_cfg_minor_version =
 			AFE_API_VERSION_LOOPBACK_CONFIG;
@@ -875,13 +883,15 @@ int afe_loopback_gain(u16 port_id, u16 volume)
 	set_param.hdr.opcode = AFE_PORT_CMD_SET_PARAM;
 
 	set_param.port_id		= port_id;
-	set_param.payload_size		= sizeof(struct afe_param_payload);
+	set_param.payload_size	= sizeof(struct afe_param_payload_base) +
+				  sizeof(struct afe_param_loopback_gain);
 	set_param.payload_address	= 0;
 
-	set_param.payload.module_id	= AFE_MODULE_ID_PORT_INFO;
-	set_param.payload.param_id	= AFE_PARAM_ID_LOOPBACK_GAIN;
-	set_param.payload.param_size = sizeof(struct afe_param_loopback_gain);
-	set_param.payload.reserved	= 0;
+	set_param.payload.base.module_id	= AFE_MODULE_ID_PORT_INFO;
+	set_param.payload.base.param_id	= AFE_PARAM_ID_LOOPBACK_GAIN;
+	set_param.payload.base.param_size =
+		sizeof(struct afe_param_loopback_gain);
+	set_param.payload.base.reserved	= 0;
 
 	set_param.payload.param.loopback_gain.gain		= volume;
 	set_param.payload.param.loopback_gain.reserved	= 0;

@@ -166,6 +166,11 @@ int msm_clear_copp_id(int session_id, int copp_id)
 
 	if (session_id < 1 || session_id > 8)
 		return -EINVAL;
+
+	//                                                                         
+	if(index < 0 || index >= AFE_MAX_PORTS)
+		return -EINVAL;
+	//                                                                       
 	pr_debug("%s: session[%d] copp_id[%d] index[%d]\n", __func__,
 			session_id, copp_id, index);
 	mutex_lock(&routing_info.copp_list_mutex);

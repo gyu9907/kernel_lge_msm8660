@@ -48,6 +48,12 @@
 static void (*power_on_charm)(void);
 static void (*power_down_charm)(void);
 
+//                                                
+#ifdef CONFIG_LGE_MDM_PMIC_8028	/*                                        */
+static void (*power_reset_charm)(void);
+#endif
+//                                                
+
 static int charm_debug_on;
 static int charm_status_irq;
 static int charm_errfatal_irq;
@@ -57,6 +63,13 @@ static int charm_boot_status;
 static int charm_ram_dump_status;
 static struct workqueue_struct *charm_queue;
 
+//                                                        
+#ifdef CONFIG_LGE_SDIO_DEBUG_CH	/*                                        */
+int uls_mdm_crash_fatal_flag = false;   // set to true from MDM2AP_ERRFATAL(1)
+int uls_mdm_status_low_flag = false;    // set to true from MDM2AP_STATUS(0)
+#endif /*                        */
+//                                                       
+
 #define CHARM_DBG(...)	do { if (charm_debug_on) \
 					pr_info(__VA_ARGS__); \
 			} while (0);
@@ -65,6 +78,13 @@ static struct workqueue_struct *charm_queue;
 DECLARE_COMPLETION(charm_needs_reload);
 DECLARE_COMPLETION(charm_boot);
 DECLARE_COMPLETION(charm_ram_dumps);
+
+#ifdef CONFIG_MSM_SUBSYSTEM_RESTART //                                                                    
+int charm_boot_mode(void)
+{
+	return (int)boot_type;
+}
+#endif
 
 static void charm_disable_irqs(void)
 {
@@ -119,11 +139,21 @@ static int charm_panic_prep(struct notifier_block *this,
 
 	CHARM_DBG("%s: setting AP2MDM_ERRFATAL high for a non graceful reset\n",
 			 __func__);
+
+	/*                                        */
+#if 1 //                                                                                     
 	if (get_restart_level() == RESET_SOC)
 		pm8xxx_stay_on();
+#endif
 
 	charm_disable_irqs();
+#if defined (CONFIG_MSM_8X60_FUSION_GPIO_GLITCH)	/*                                                          */
+    gpio_set_value(AP2MDM_ERRFATAL, 0);
+    mdelay(1);
+    gpio_set_value(AP2MDM_ERRFATAL, 1);
+#else
 	gpio_set_value(AP2MDM_ERRFATAL, 1);
+#endif
 	gpio_set_value(AP2MDM_WAKEUP, 1);
 	for (i = CHARM_MODEM_TIMEOUT; i > 0; i -= CHARM_MODEM_DELTA) {
 		pet_watchdog();
@@ -172,6 +202,11 @@ static long charm_modem_ioctl(struct file *filp, unsigned int cmd,
 			charm_boot_status = -EIO;
 		else
 			charm_boot_status = 0;
+
+		/*                                        */
+#ifdef CONFIG_MSM_SUBSYSTEM_RESTART  //                                                   
+		if (first_boot)
+#endif
 		charm_ready = 1;
 
 		gpio_set_value(AP2MDM_KPDPWR_N, 0);
@@ -197,6 +232,15 @@ static long charm_modem_ioctl(struct file *filp, unsigned int cmd,
 			put_user(boot_type, (unsigned long __user *) arg);
 		INIT_COMPLETION(charm_needs_reload);
 		break;
+		//                                                
+#ifdef CONFIG_LGE_MDM_PMIC_8028	/*                                        */
+	case CHARM_FORCE_RESET:
+		printk("OBD %s: wait for charm to reset\n",
+				__func__);
+		power_reset_charm();
+		break;
+#endif
+		//                                                
 	default:
 		pr_err("%s: invalid ioctl cmd = %d\n", __func__, _IOC_NR(cmd));
 		ret = -EINVAL;
@@ -229,6 +273,9 @@ struct miscdevice charm_modem_misc = {
 static void charm_status_fn(struct work_struct *work)
 {
 	pr_info("Reseting the charm because status changed\n");
+#ifdef CONFIG_LGE_SDIO_DEBUG_CH	/*                                        */
+	uls_mdm_status_low_flag = true; //                                                        
+#endif /*                        */
 	subsystem_restart("external_modem");
 }
 
@@ -237,8 +284,16 @@ static DECLARE_WORK(charm_status_work, charm_status_fn);
 static void charm_fatal_fn(struct work_struct *work)
 {
 	pr_info("Reseting the charm due to an errfatal\n");
+	/*                                        */
+#if 1 //                                                                                     
 	if (get_restart_level() == RESET_SOC)
 		pm8xxx_stay_on();
+#endif
+
+#ifdef CONFIG_LGE_SDIO_DEBUG_CH	/*                                        */
+	uls_mdm_crash_fatal_flag = true; //                                                        
+#endif /*                        */
+
 	subsystem_restart("external_modem");
 }
 
@@ -262,6 +317,12 @@ static irqreturn_t charm_status_change(int irq, void *dev_id)
 		queue_work(charm_queue, &charm_status_work);
 	} else if (gpio_get_value(MDM2AP_STATUS) == 1) {
 		CHARM_DBG("%s: charm is now ready\n", __func__);
+
+		/*                                        */
+#ifdef CONFIG_MSM_SUBSYSTEM_RESTART //                                                                                           
+		if (!first_boot)
+			charm_ready = 1;
+#endif
 	}
 	return IRQ_HANDLED;
 }
@@ -328,14 +389,33 @@ static int __init charm_modem_probe(struct platform_device *pdev)
 	gpio_request(MDM2AP_ERRFATAL, "MDM2AP_ERRFATAL");
 	gpio_request(AP2MDM_WAKEUP, "AP2MDM_WAKEUP");
 
+	/*                                                       
+                                                                                    
+                                           
+                                                           
+                                                          */
+#ifdef CONFIG_LGE_MDM_PMIC_8028	/*                                        */
+	gpio_direction_output(AP2MDM_KPDPWR_N, 0);
+#endif
+
 	gpio_direction_output(AP2MDM_STATUS, 1);
+#if defined (CONFIG_MSM_8X60_FUSION_GPIO_GLITCH)	/*                                                          */
+    gpio_direction_output(AP2MDM_ERRFATAL, 1);
+#else
 	gpio_direction_output(AP2MDM_ERRFATAL, 0);
+#endif
 	gpio_direction_output(AP2MDM_WAKEUP, 0);
 	gpio_direction_input(MDM2AP_STATUS);
 	gpio_direction_input(MDM2AP_ERRFATAL);
 
 	power_on_charm = d->charm_modem_on;
 	power_down_charm = d->charm_modem_off;
+
+	//                                                
+#ifdef CONFIG_LGE_MDM_PMIC_8028	/*                                        */
+	power_reset_charm = d->charm_force_reset;
+#endif
+	//                                                
 
 	charm_queue = create_singlethread_workqueue("charm_queue");
 	if (!charm_queue) {
@@ -428,7 +508,7 @@ static void charm_modem_shutdown(struct platform_device *pdev)
 	int i;
 
 	CHARM_DBG("%s: setting AP2MDM_STATUS low for a graceful restart\n",
-		__func__);
+			__func__);
 
 	charm_disable_irqs();
 
@@ -444,7 +524,7 @@ static void charm_modem_shutdown(struct platform_device *pdev)
 
 	if (i <= 0) {
 		pr_err("%s: MDM2AP_STATUS never went low.\n",
-			 __func__);
+				__func__);
 		gpio_direction_output(AP2MDM_PMIC_RESET_N, 1);
 		for (i = CHARM_HOLD_TIME; i > 0; i -= CHARM_MODEM_DELTA) {
 			pet_watchdog();

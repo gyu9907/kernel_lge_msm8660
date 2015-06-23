@@ -69,6 +69,7 @@ int subsys_q6_shutdown(const struct subsys_data *crashed_subsys)
 {
 	void __iomem *q6_wdog_addr =
 		ioremap_nocache(Q6SS_WDOG_ENABLE, 8);
+	pr_info("%s\n", __func__);		//                      
 
 	send_q6_nmi();
 	writel_relaxed(0x0, q6_wdog_addr);
@@ -85,6 +86,7 @@ int subsys_q6_shutdown(const struct subsys_data *crashed_subsys)
 int subsys_q6_powerup(const struct subsys_data *crashed_subsys)
 {
 	int ret = pil_force_boot("q6");
+	pr_info("%s\n", __func__);		//                      
 	enable_irq(LPASS_Q6SS_WDOG_EXPIRED);
 	return ret;
 }
@@ -104,6 +106,7 @@ static int subsys_q6_ramdump(int enable,
 
 void subsys_q6_crash_shutdown(const struct subsys_data *crashed_subsys)
 {
+	pr_info("%s\n", __func__);		//                      
 	send_q6_nmi();
 }
 
@@ -134,6 +137,7 @@ static void __exit lpass_fatal_exit(void)
 static int __init lpass_fatal_init(void)
 {
 	int ret;
+	pr_info("%s\n", __func__);		//                      
 
 	ret = request_irq(LPASS_Q6SS_WDOG_EXPIRED, lpass_wdog_bite_irq,
 			IRQF_TRIGGER_RISING, "q6_wdog", NULL);
