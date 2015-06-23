@@ -4,15 +4,19 @@
 # What library to link
 ldflags()
 {
-	for ext in so a dylib ; do
-		for lib in ncursesw ncurses curses ; do
-			$cc -print-file-name=lib${lib}.${ext} | grep -q /
-			if [ $? -eq 0 ]; then
-				echo "-l${lib}"
-				exit
-			fi
+	if [ "$(uname -s)" = "Darwin" ]; then
+		echo "-lncurses"
+	else
+		for ext in so a dylib ; do
+			for lib in ncursesw ncurses curses ; do
+				$cc -print-file-name=lib${lib}.${ext} | grep -q /
+				if [ $? -eq 0 ]; then
+					echo "-l${lib}"
+					exit
+				fi
+			done
 		done
-	done
+	fi
 	exit 1
 }
 
