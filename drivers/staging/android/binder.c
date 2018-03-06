@@ -81,6 +81,10 @@ BINDER_DEBUG_ENTRY(proc);
 #define SZ_4M                               0x400000
 #endif
 
+#ifndef SIZE_MAX
+#define SIZE_MAX ((size_t)-1)
+#endif
+
 #define FORBIDDEN_MMAP_FLAGS                (VM_WRITE)
 
 #define BINDER_SMALL_BUF_SIZE (PAGE_SIZE * 64)
@@ -567,8 +571,9 @@ static size_t binder_buffer_size(struct binder_proc *proc,
 {
 	if (list_is_last(&buffer->entry, &proc->buffers))
 		return proc->buffer + proc->buffer_size - (void *)buffer->data;
-	return (size_t)list_entry(buffer->entry.next,
-			  struct binder_buffer, entry) - (size_t)buffer->data;
+	else
+		return (size_t)list_entry(buffer->entry.next,
+			struct binder_buffer, entry) - (size_t)buffer->data;
 }
 
 static void binder_insert_free_buffer(struct binder_proc *proc,
@@ -702,7 +707,7 @@ static int binder_update_page_range(struct binder_proc *proc, int allocate,
 		page = &proc->pages[(page_addr - proc->buffer) / PAGE_SIZE];
 
 		BUG_ON(*page);
-		*page = alloc_page(GFP_HIGHUSER);
+		*page = alloc_page(GFP_KERNEL | __GFP_HIGHMEM | __GFP_ZERO);
 		if (*page == NULL) {
 			pr_err("%d: binder_alloc_buf failed for page at %pK\n",
 				proc->pid, page_addr);
