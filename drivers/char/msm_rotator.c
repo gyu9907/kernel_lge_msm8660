@@ -29,6 +29,8 @@
 #include <linux/major.h>
 #include <linux/regulator/consumer.h>
 #include <linux/ion.h>
+#include <linux/sync.h>
+#include <linux/sw_sync.h>
 #ifdef CONFIG_MSM_BUS_SCALING
 #include <mach/msm_bus.h>
 #include <mach/msm_bus_board.h>
@@ -90,6 +92,9 @@
 #define INVALID_SESSION -1
 #define VERSION_KEY_MASK 0xFFFFFF00
 #define MAX_DOWNSCALE_RATIO 3
+#define MAX_TIMELINE_NAME_LEN 16
+#define WAIT_FENCE_FIRST_TIMEOUT MSEC_PER_SEC
+#define WAIT_FENCE_FINAL_TIMEOUT (10 * MSEC_PER_SEC)
 
 #define ROTATOR_REVISION_V0		0
 #define ROTATOR_REVISION_V1		1
@@ -128,6 +133,15 @@ struct msm_rotator_fd_info {
 	struct list_head list;
 };
 
+struct rot_sync_info {
+	u32 initialized;
+	struct sync_fence *acq_fen;
+	struct sync_fence *cur_rel_fence;
+	struct sw_sync_timeline *timeline;
+	int timeline_value;
+	struct mutex sync_mutex;
+};
+
 struct msm_rotator_dev {
 	void __iomem *io_base;
 	int irq;
@@ -157,6 +171,7 @@ struct msm_rotator_dev {
 	#ifdef CONFIG_MSM_BUS_SCALING
 	uint32_t bus_client_handle;
 	#endif
+	struct rot_sync_info sync_info[MAX_SESSIONS];
 };
 
 #define COMPONENT_5BITS 1
@@ -329,6 +344,149 @@ static irqreturn_t msm_rotator_isr(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+static void msm_rotator_signal_timeline(u32 session_index)
+{
+	struct rot_sync_info *sync_info;
+
+	if (session_index >= MAX_SESSIONS)
+		return;
+	sync_info = &msm_rotator_dev->sync_info[session_index];
+	if (!sync_info->initialized || !sync_info->timeline)
+		return;
+
+	mutex_lock(&sync_info->sync_mutex);
+	sw_sync_timeline_inc(sync_info->timeline, 1);
+	sync_info->timeline_value++;
+	sync_info->cur_rel_fence = NULL;
+	mutex_unlock(&sync_info->sync_mutex);
+}
+
+static void msm_rotator_release_acq_fence(u32 session_index)
+{
+	struct rot_sync_info *sync_info;
+
+	if (session_index >= MAX_SESSIONS)
+		return;
+	sync_info = &msm_rotator_dev->sync_info[session_index];
+	if (!sync_info->initialized)
+		return;
+
+	mutex_lock(&sync_info->sync_mutex);
+	if (sync_info->acq_fen)
+		sync_fence_put(sync_info->acq_fen);
+	sync_info->acq_fen = NULL;
+	mutex_unlock(&sync_info->sync_mutex);
+}
+
+static void msm_rotator_wait_for_fence(u32 session_index)
+{
+	struct rot_sync_info *sync_info;
+	int ret;
+
+	sync_info = &msm_rotator_dev->sync_info[session_index];
+	if (!sync_info->initialized || !sync_info->timeline)
+		return;
+
+	mutex_lock(&sync_info->sync_mutex);
+	if (sync_info->acq_fen) {
+		ret = sync_fence_wait(sync_info->acq_fen,
+				WAIT_FENCE_FIRST_TIMEOUT);
+		if (ret == -ETIME)
+			ret = sync_fence_wait(sync_info->acq_fen,
+					WAIT_FENCE_FINAL_TIMEOUT);
+		if (ret < 0)
+			pr_err("%s: fence wait failed: %d\n", __func__, ret);
+		sync_fence_put(sync_info->acq_fen);
+		sync_info->acq_fen = NULL;
+	}
+	mutex_unlock(&sync_info->sync_mutex);
+}
+
+static int msm_rotator_buf_sync(unsigned long arg)
+{
+	struct msm_rotator_buf_sync buf_sync;
+	struct rot_sync_info *sync_info;
+	struct sync_fence *acq_fen = NULL;
+	struct sync_pt *rel_sync_pt;
+	struct sync_fence *rel_fence;
+	int rel_fen_fd = -ENOMEM;
+	u32 s;
+
+	if (copy_from_user(&buf_sync, (void __user *)arg, sizeof(buf_sync)))
+		return -EFAULT;
+
+	for (s = 0; s < MAX_SESSIONS; s++)
+		if (msm_rotator_dev->img_info[s] &&
+			buf_sync.session_id ==
+			(unsigned int)msm_rotator_dev->img_info[s])
+			break;
+	if (s == MAX_SESSIONS)
+		return -EINVAL;
+
+	sync_info = &msm_rotator_dev->sync_info[s];
+	if (!sync_info->initialized || !sync_info->timeline)
+		return -EINVAL;
+	if (buf_sync.acq_fen_fd >= 0) {
+		acq_fen = sync_fence_fdget(buf_sync.acq_fen_fd);
+		if (!acq_fen)
+			return -EINVAL;
+	}
+
+	mutex_lock(&sync_info->sync_mutex);
+	if (sync_info->acq_fen)
+		sync_fence_put(sync_info->acq_fen);
+	sync_info->acq_fen = acq_fen;
+	if ((buf_sync.flags & MDP_BUF_SYNC_FLAG_WAIT) &&
+			sync_info->acq_fen) {
+		int ret;
+
+		ret = sync_fence_wait(sync_info->acq_fen,
+				WAIT_FENCE_FIRST_TIMEOUT);
+		if (ret == -ETIME)
+			ret = sync_fence_wait(sync_info->acq_fen,
+					WAIT_FENCE_FINAL_TIMEOUT);
+		if (ret < 0)
+			pr_err("%s: fence wait failed: %d\n", __func__, ret);
+		sync_fence_put(sync_info->acq_fen);
+		sync_info->acq_fen = NULL;
+	}
+
+	rel_sync_pt = sw_sync_pt_create(sync_info->timeline,
+			sync_info->timeline_value + 1);
+	if (!rel_sync_pt)
+		goto err_release_acq_fence;
+	rel_fence = sync_fence_create("msm_rotator-fence", rel_sync_pt);
+	if (!rel_fence) {
+		sync_pt_free(rel_sync_pt);
+		goto err_release_acq_fence;
+	}
+	rel_fen_fd = get_unused_fd_flags(0);
+	if (rel_fen_fd < 0) {
+		sync_fence_put(rel_fence);
+		goto err_release_acq_fence;
+	}
+
+	buf_sync.rel_fen_fd = rel_fen_fd;
+	if (copy_to_user((void __user *)arg, &buf_sync, sizeof(buf_sync))) {
+		put_unused_fd(rel_fen_fd);
+		sync_fence_put(rel_fence);
+		rel_fen_fd = -EFAULT;
+		goto err_release_acq_fence;
+	}
+
+	sync_info->cur_rel_fence = rel_fence;
+	sync_fence_install(rel_fence, rel_fen_fd);
+	mutex_unlock(&sync_info->sync_mutex);
+	return 0;
+
+err_release_acq_fence:
+	if (sync_info->acq_fen)
+		sync_fence_put(sync_info->acq_fen);
+	sync_info->acq_fen = NULL;
+	mutex_unlock(&sync_info->sync_mutex);
+	return rel_fen_fd < 0 ? rel_fen_fd : -ENOMEM;
+}
+
 static unsigned int tile_size(unsigned int src_width,
 		unsigned int src_height,
 		const struct tile_parm *tp)
@@ -370,6 +528,7 @@ static int get_bpp(int format)
 	case MDP_YCRCB_H1V1:
 		return 3;
 
+	case MDP_YCBYCR_H2V1:
 	case MDP_YCRYCB_H2V1:
 		return 2;/* YCrYCb interleave */
 
@@ -413,6 +572,7 @@ static int msm_rotator_get_plane_sizes(uint32_t format,	uint32_t w, uint32_t h,
 	case MDP_RGB_888:
 	case MDP_RGB_565:
 	case MDP_BGR_565:
+	case MDP_YCBYCR_H2V1:
 	case MDP_YCRYCB_H2V1:
 	case MDP_YCBCR_H1V1:
 	case MDP_YCRCB_H1V1:
@@ -421,6 +581,8 @@ static int msm_rotator_get_plane_sizes(uint32_t format,	uint32_t w, uint32_t h,
 		break;
 	case MDP_Y_CRCB_H2V1:
 	case MDP_Y_CBCR_H2V1:
+	case MDP_Y_CRCB_H1V2:
+	case MDP_Y_CBCR_H1V2:
 		p->num_planes = 2;
 		p->plane_size[0] = w * h;
 		p->plane_size[1] = w * h;
@@ -469,8 +631,22 @@ static int msm_rotator_ycxcx_h2v1(struct msm_rotator_img_info *info,
 				  unsigned int out_chroma_paddr)
 {
 	int bpp;
+	uint32_t dst_format;
 
-	if (info->src.format != info->dst.format)
+	switch (info->src.format) {
+	case MDP_Y_CRCB_H2V1:
+		dst_format = (info->rotations & MDP_ROT_90) ?
+			MDP_Y_CRCB_H1V2 : MDP_Y_CRCB_H2V1;
+		break;
+	case MDP_Y_CBCR_H2V1:
+		dst_format = (info->rotations & MDP_ROT_90) ?
+			MDP_Y_CBCR_H1V2 : MDP_Y_CBCR_H2V1;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (info->dst.format != dst_format)
 		return -EINVAL;
 
 	bpp = get_bpp(info->src.format);
@@ -641,7 +817,7 @@ static int msm_rotator_ycxcx_h2v2(struct msm_rotator_img_info *info,
 	return 0;
 }
 
-static int msm_rotator_ycrycb(struct msm_rotator_img_info *info,
+static int msm_rotator_ycxycx(struct msm_rotator_img_info *info,
 			      unsigned int in_paddr,
 			      unsigned int out_paddr,
 			      unsigned int use_imem,
@@ -651,10 +827,18 @@ static int msm_rotator_ycrycb(struct msm_rotator_img_info *info,
 	int bpp;
 	uint32_t dst_format;
 
-	if (info->src.format == MDP_YCRYCB_H2V1)
-		dst_format = MDP_Y_CRCB_H2V1;
-	else
+	switch (info->src.format) {
+	case MDP_YCBYCR_H2V1:
+		dst_format = (info->rotations & MDP_ROT_90) ?
+			MDP_Y_CBCR_H1V2 : MDP_Y_CBCR_H2V1;
+		break;
+	case MDP_YCRYCB_H2V1:
+		dst_format = (info->rotations & MDP_ROT_90) ?
+			MDP_Y_CRCB_H1V2 : MDP_Y_CRCB_H2V1;
+		break;
+	default:
 		return -EINVAL;
+	}
 
 	if (info->dst.format != dst_format)
 		return -EINVAL;
@@ -683,10 +867,18 @@ static int msm_rotator_ycrycb(struct msm_rotator_img_info *info,
 				  (info->dst.width) << 16,
 				  MSM_ROTATOR_OUT_YSTRIDE1);
 
-		iowrite32(GET_PACK_PATTERN(CLR_Y, CLR_CR, CLR_Y, CLR_CB, 8),
-			  MSM_ROTATOR_SRC_UNPACK_PATTERN1);
-		iowrite32(GET_PACK_PATTERN(0, 0, CLR_CR, CLR_CB, 8),
-			  MSM_ROTATOR_OUT_PACK_PATTERN1);
+		if (dst_format == MDP_Y_CBCR_H1V2 ||
+				dst_format == MDP_Y_CBCR_H2V1) {
+			iowrite32(GET_PACK_PATTERN(0, CLR_CB, 0, CLR_CR, 8),
+				  MSM_ROTATOR_SRC_UNPACK_PATTERN1);
+			iowrite32(GET_PACK_PATTERN(0, 0, CLR_CB, CLR_CR, 8),
+				  MSM_ROTATOR_OUT_PACK_PATTERN1);
+		} else {
+			iowrite32(GET_PACK_PATTERN(0, CLR_CR, 0, CLR_CB, 8),
+				  MSM_ROTATOR_SRC_UNPACK_PATTERN1);
+			iowrite32(GET_PACK_PATTERN(0, 0, CLR_CR, CLR_CB, 8),
+				  MSM_ROTATOR_OUT_PACK_PATTERN1);
+		}
 		iowrite32((1  << 18) | 		/* chroma sampling 1=H2V1 */
 			  (ROTATIONS_TO_BITMASK(info->rotations) << 9) |
 			  1 << 8 |			/* ROT_EN */
@@ -949,6 +1141,8 @@ static int msm_rotator_do_rotate(unsigned long arg)
 		goto do_rotate_unlock_mutex;
 	}
 
+	msm_rotator_wait_for_fence(s);
+
 	img_info = msm_rotator_dev->img_info[s];
 	if (msm_rotator_get_plane_sizes(img_info->src.format,
 					img_info->src.width,
@@ -1149,8 +1343,9 @@ static int msm_rotator_do_rotate(unsigned long arg)
 					    in_chroma_paddr,
 					    out_chroma_paddr);
 		break;
+	case MDP_YCBYCR_H2V1:
 	case MDP_YCRYCB_H2V1:
-		rc = msm_rotator_ycrycb(msm_rotator_dev->img_info[s],
+		rc = msm_rotator_ycxycx(msm_rotator_dev->img_info[s],
 				in_paddr, out_paddr, use_imem,
 				msm_rotator_dev->last_session_idx != s,
 				out_chroma_paddr);
@@ -1191,16 +1386,20 @@ do_rotate_exit:
 	schedule_delayed_work(&msm_rotator_dev->rot_clk_work, HZ);
 do_rotate_unlock_mutex:
 	put_img(dstp1_file, dstp1_ihdl, ROTATOR_DST_DOMAIN,
-		msm_rotator_dev->img_info[s]->secure);
+		(s < MAX_SESSIONS && msm_rotator_dev->img_info[s]) ?
+		msm_rotator_dev->img_info[s]->secure : 0);
 	put_img(srcp1_file, srcp1_ihdl, ROTATOR_SRC_DOMAIN, 0);
 	put_img(dstp0_file, dstp0_ihdl, ROTATOR_DST_DOMAIN,
-		msm_rotator_dev->img_info[s]->secure);
+		(s < MAX_SESSIONS && msm_rotator_dev->img_info[s]) ?
+		msm_rotator_dev->img_info[s]->secure : 0);
 
 	/* only source may use frame buffer */
 	if (info.src.flags & MDP_MEMORY_ID_TYPE_FB)
 		fput_light(srcp0_file, ps0_need);
 	else
 		put_img(srcp0_file, srcp0_ihdl, ROTATOR_SRC_DOMAIN, 0);
+	if (s < MAX_SESSIONS)
+		msm_rotator_signal_timeline(s);
 	mutex_unlock(&msm_rotator_dev->rotator_lock);
 	dev_dbg(msm_rotator_dev->device, "%s() returning rc = %d\n",
 		__func__, rc);
@@ -1234,7 +1433,9 @@ static int msm_rotator_start(unsigned long arg,
 	int rc = 0;
 	int s, is_rgb = 0;
 	int first_free_index = INVALID_SESSION;
+	int new_session = 0;
 	unsigned int dst_w, dst_h;
+	struct rot_sync_info *sync_info;
 
 	if (copy_from_user(&info, (void __user *)arg, sizeof(info)))
 		return -EFAULT;
@@ -1280,13 +1481,24 @@ static int msm_rotator_start(unsigned long arg,
 	case MDP_Y_CBCR_H2V2:
 	case MDP_Y_CRCB_H2V2:
 	case MDP_Y_CBCR_H2V1:
+		info.dst.format = (info.rotations & MDP_ROT_90) ?
+			MDP_Y_CBCR_H1V2 : MDP_Y_CBCR_H2V1;
+		break;
 	case MDP_Y_CRCB_H2V1:
+		info.dst.format = (info.rotations & MDP_ROT_90) ?
+			MDP_Y_CRCB_H1V2 : MDP_Y_CRCB_H2V1;
+		break;
 	case MDP_YCBCR_H1V1:
 	case MDP_YCRCB_H1V1:
 		info.dst.format = info.src.format;
 		break;
+	case MDP_YCBYCR_H2V1:
+		info.dst.format = (info.rotations & MDP_ROT_90) ?
+			MDP_Y_CBCR_H1V2 : MDP_Y_CBCR_H2V1;
+		break;
 	case MDP_YCRYCB_H2V1:
-		info.dst.format = MDP_Y_CRCB_H2V1;
+		info.dst.format = (info.rotations & MDP_ROT_90) ?
+			MDP_Y_CRCB_H1V2 : MDP_Y_CRCB_H2V1;
 		break;
 	case MDP_Y_CB_CR_H2V2:
 	case MDP_Y_CBCR_H2V2_TILE:
@@ -1340,14 +1552,45 @@ static int msm_rotator_start(unsigned long arg,
 			msm_rotator_dev->img_info[first_free_index];
 		*(msm_rotator_dev->img_info[first_free_index]) = info;
 		msm_rotator_dev->fd_info[first_free_index] = fd_info;
+		s = first_free_index;
+		new_session = 1;
 	} else if (s == MAX_SESSIONS) {
 		dev_dbg(msm_rotator_dev->device, "%s: all sessions in use\n",
 			__func__);
 		rc = -EBUSY;
 	}
 
-	if (rc == 0 && copy_to_user((void __user *)arg, &info, sizeof(info)))
+	if (rc == 0) {
+		sync_info = &msm_rotator_dev->sync_info[s];
+		if (!sync_info->initialized) {
+			char timeline_name[MAX_TIMELINE_NAME_LEN];
+
+			snprintf(timeline_name, sizeof(timeline_name),
+				"msm_rot_%d", s);
+			sync_info->timeline =
+				sw_sync_timeline_create(timeline_name);
+			if (!sync_info->timeline) {
+				rc = -ENOMEM;
+				goto rotator_start_cleanup;
+			}
+			mutex_init(&sync_info->sync_mutex);
+			sync_info->timeline_value = 0;
+			sync_info->initialized = true;
+		}
+	}
+
+	if (rc == 0 && copy_to_user((void __user *)arg, &info, sizeof(info))) {
 		rc = -EFAULT;
+		goto rotator_start_cleanup;
+	}
+	goto rotator_start_exit;
+
+rotator_start_cleanup:
+	if (new_session) {
+		kfree(msm_rotator_dev->img_info[s]);
+		msm_rotator_dev->img_info[s] = NULL;
+		msm_rotator_dev->fd_info[s] = NULL;
+	}
 
 rotator_start_exit:
 	mutex_unlock(&msm_rotator_dev->rotator_lock);
@@ -1372,6 +1615,8 @@ static int msm_rotator_finish(unsigned long arg)
 			if (msm_rotator_dev->last_session_idx == s)
 				msm_rotator_dev->last_session_idx =
 					INVALID_SESSION;
+			msm_rotator_signal_timeline(s);
+			msm_rotator_release_acq_fence(s);
 			kfree(msm_rotator_dev->img_info[s]);
 			msm_rotator_dev->img_info[s] = NULL;
 			msm_rotator_dev->fd_info[s] = NULL;
@@ -1455,6 +1700,8 @@ msm_rotator_close(struct inode *inode, struct file *filp)
 			pr_debug("%s: freeing rotator session %p (pid %d)\n",
 				 __func__, msm_rotator_dev->img_info[s],
 				 fd_info->pid);
+			msm_rotator_signal_timeline(s);
+			msm_rotator_release_acq_fence(s);
 			kfree(msm_rotator_dev->img_info[s]);
 			msm_rotator_dev->img_info[s] = NULL;
 			msm_rotator_dev->fd_info[s] = NULL;
@@ -1487,6 +1734,8 @@ static long msm_rotator_ioctl(struct file *file, unsigned cmd,
 		return msm_rotator_do_rotate(arg);
 	case MSM_ROTATOR_IOCTL_FINISH:
 		return msm_rotator_finish(arg);
+	case MSM_ROTATOR_IOCTL_BUFFER_SYNC:
+		return msm_rotator_buf_sync(arg);
 
 	default:
 		dev_dbg(msm_rotator_dev->device,
@@ -1767,6 +2016,8 @@ static int __devexit msm_rotator_remove(struct platform_device *plat_dev)
 #ifdef CONFIG_PM
 static int msm_rotator_suspend(struct platform_device *dev, pm_message_t state)
 {
+	int i;
+
 	mutex_lock(&msm_rotator_dev->imem_lock);
 	if (msm_rotator_dev->imem_clk_state == CLK_EN
 		&& msm_rotator_dev->imem_clk) {
@@ -1778,6 +2029,10 @@ static int msm_rotator_suspend(struct platform_device *dev, pm_message_t state)
 	if (msm_rotator_dev->rot_clk_state == CLK_EN) {
 		disable_rot_clks();
 		msm_rotator_dev->rot_clk_state = CLK_SUSPEND;
+	}
+	for (i = 0; i < MAX_SESSIONS; i++) {
+		msm_rotator_signal_timeline(i);
+		msm_rotator_release_acq_fence(i);
 	}
 	mutex_unlock(&msm_rotator_dev->rotator_lock);
 	return 0;

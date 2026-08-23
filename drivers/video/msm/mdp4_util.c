@@ -2552,7 +2552,7 @@ u32 mdp4_allocate_writeback_buf(struct msm_fb_data_type *mfd, u32 mix_num)
 		pr_info("%s:%d ion based allocation mfd->mem_hid 0x%x\n",
 			__func__, __LINE__, mfd->mem_hid);
 		buf->ihdl = ion_alloc(mfd->iclient, buffer_size, SZ_4K,
-			mfd->mem_hid);
+			mfd->mem_hid, 0);
 		if (!IS_ERR_OR_NULL(buf->ihdl)) {
 			if (mdp_iommu_split_domain) {
 				if (ion_map_iommu(mfd->iclient, buf->ihdl,
@@ -3252,10 +3252,9 @@ static uint32_t mdp4_pp_block2qseed(uint32_t block)
 	return valid;
 }
 
-static int mdp4_qseed_write_cfg(struct mdp_qseed_cfg_data *cfg)
+int mdp4_qseed_access_cfg(struct mdp_qseed_cfg *cfg, uint32_t base)
 {
 	int i, ret = 0;
-	uint32_t base = (uint32_t) (MDP_BASE + mdp_block2base(cfg->block));
 	uint32_t *values;
 
 	if ((cfg->table_num != 1) && (cfg->table_num != 2)) {
@@ -3275,25 +3274,52 @@ static int mdp4_qseed_write_cfg(struct mdp_qseed_cfg_data *cfg)
 		goto error;
 	}
 
-	ret = copy_from_user(values, cfg->data, sizeof(uint32_t) * cfg->len);
-
 	base += (cfg->table_num == 1) ? MDP4_QSEED_TABLE1_OFF :
 						MDP4_QSEED_TABLE2_OFF;
-	for (i = 0; i < cfg->len; i++) {
-		MDP_OUTP(base , values[i]);
-		base += sizeof(uint32_t);
+
+	if (cfg->ops & MDP_PP_OPS_WRITE) {
+		ret = copy_from_user(values, cfg->data,
+						sizeof(uint32_t) * cfg->len);
+		if (ret) {
+			ret = -EINVAL;
+			goto err_mem;
+		}
+		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+		for (i = 0; i < cfg->len; i++) {
+			if (!(base & 0x3ff))
+				wmb();
+			MDP_OUTP(base, values[i]);
+			base += sizeof(uint32_t);
+		}
+		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
+	} else if (cfg->ops & MDP_PP_OPS_READ) {
+		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+		for (i = 0; i < cfg->len; i++) {
+			values[i] = inpdw(base);
+			if (!(base & 0x3ff))
+				rmb();
+			base += sizeof(uint32_t);
+		}
+		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
+		ret = copy_to_user(cfg->data, values,
+						sizeof(uint32_t) * cfg->len);
+		if (ret)
+			ret = -EINVAL;
 	}
 
+err_mem:
 	kfree(values);
 error:
 	return ret;
 }
 
-int mdp4_qseed_cfg(struct mdp_qseed_cfg_data *cfg)
+int mdp4_qseed_cfg(struct mdp_qseed_cfg_data *config)
 {
 	int ret = 0;
+	uint32_t base;
+	struct mdp_qseed_cfg *cfg = &config->qseed_data;
 
-	if (!mdp4_pp_block2qseed(cfg->block)) {
+	if (!mdp4_pp_block2qseed(config->block)) {
 		ret = -ENOTTY;
 		goto error;
 	}
@@ -3304,19 +3330,8 @@ int mdp4_qseed_cfg(struct mdp_qseed_cfg_data *cfg)
 		goto error;
 	}
 
-	switch ((cfg->ops & 0x6) >> 1) {
-	case 0x1:
-		pr_info("%s: QSEED read not supported\n", __func__);
-		ret = -ENOTTY;
-		break;
-	case 0x2:
-		ret = mdp4_qseed_write_cfg(cfg);
-		if (ret)
-			goto error;
-		break;
-	default:
-		break;
-	}
+	base = (uint32_t)(MDP_BASE + mdp_block2base(config->block));
+	ret = mdp4_qseed_access_cfg(cfg, base);
 
 error:
 	return ret;
