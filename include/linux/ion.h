@@ -105,6 +105,17 @@ enum cp_mem_usage {
  */
 #define ION_HEAP(bit) (1 << (bit))
 
+#define ion_full_heap_mask (ION_HEAP(ION_CP_MM_HEAP_ID) | \
+			   ION_HEAP(ION_CP_MFC_HEAP_ID) | \
+			   ION_HEAP(ION_CP_WB_HEAP_ID) | \
+			   ION_HEAP(ION_CAMERA_HEAP_ID) | \
+			   ION_HEAP(ION_SF_HEAP_ID) | \
+			   ION_HEAP(ION_IOMMU_HEAP_ID) | \
+			   ION_HEAP(ION_QSECOM_HEAP_ID) | \
+			   ION_HEAP(ION_AUDIO_HEAP_ID) | \
+			   ION_HEAP(ION_MM_FIRMWARE_HEAP_ID) | \
+			   ION_HEAP(ION_SYSTEM_HEAP_ID))
+
 #define ION_VMALLOC_HEAP_NAME	"vmalloc"
 #define ION_AUDIO_HEAP_NAME	"audio"
 #define ION_SF_HEAP_NAME	"sf"
@@ -711,6 +722,13 @@ struct ion_allocation_data {
 	struct ion_handle *handle;
 };
 
+struct ion_allocation_data_compat {
+	size_t len;
+	size_t align;
+	unsigned int flags;
+	struct ion_handle *handle;
+};
+
 /**
  * struct ion_fd_data - metadata passed to/from userspace for a handle/fd pair
  * @handle:	a handle
@@ -791,6 +809,9 @@ struct ion_flag_data {
  */
 #define ION_IOC_ALLOC		_IOWR(ION_IOC_MAGIC, 0, \
 				      struct ion_allocation_data)
+
+#define ION_IOC_ALLOC_COMPAT	_IOWR(ION_IOC_MAGIC, 0, \
+				      struct ion_allocation_data_compat)
 
 /**
  * DOC: ION_IOC_FREE - free memory
