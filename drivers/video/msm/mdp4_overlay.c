@@ -3223,7 +3223,7 @@ int mdp4_overlay_unset(struct fb_info *info, int ndx)
 	}
 
 	mdp4_overlay_reg_flush(pipe, 1);
-	mdp4_mixer_stage_down(pipe, 0);
+	mdp4_mixer_stage_down(pipe, 1);
 
 	if (pipe->mixer_num == MDP4_MIXER0) {
 		if (ctrl->panel_mode & MDP4_PANEL_MDDI) {
