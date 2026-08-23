@@ -45,6 +45,9 @@
 #include <linux/android_pmem.h>
 #include <linux/leds.h>
 #include <linux/pm_runtime.h>
+#include <linux/sync.h>
+#include <linux/sw_sync.h>
+#include <linux/file.h>
 
 #define MSM_FB_C
 #include "msm_fb.h"
@@ -52,6 +55,8 @@
 #include "tvenc.h"
 #include "mdp.h"
 #include "mdp4.h"
+
+#define WAIT_FENCE_TIMEOUT (3 * MSEC_PER_SEC)
 
 //silent_reset_fusion2 
 #include "../../../lge/include/board_lge.h"
@@ -191,6 +196,7 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 static int msm_fb_suspend_sub(struct msm_fb_data_type *mfd);
 static int msm_fb_ioctl(struct fb_info *info, unsigned int cmd,
 			unsigned long arg);
+static void msm_fb_release_fences(struct msm_fb_data_type *mfd);
 static int msm_fb_mmap(struct fb_info *info, struct vm_area_struct * vma);
 static int mdp_bl_scale_config(struct msm_fb_data_type *mfd,
 						struct mdp_bl_scale_data *data);
@@ -555,6 +561,19 @@ static int msm_fb_probe(struct platform_device *pdev)
 
 	pdev_list[pdev_list_cnt++] = pdev;
 	msm_fb_create_sysfs(pdev);
+	if (!mfd->timeline) {
+		char timeline_name[32];
+
+		snprintf(timeline_name, sizeof(timeline_name),
+			"mdp-%d", mfd->index);
+		mfd->timeline = sw_sync_timeline_create(timeline_name);
+		if (!mfd->timeline) {
+			pr_err("%s: cannot create sync timeline\n", __func__);
+			return -ENOMEM;
+		}
+		mfd->timeline_value = 0;
+		mutex_init(&mfd->sync_mutex);
+	}
 
 #if 1 /*                                               */
 #ifdef CONFIG_LGE_I_DISP_BOOTLOGO
@@ -1098,6 +1117,8 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 			ret = pdata->off(mfd->pdev);
 			if (ret)
 				mfd->panel_power_on = curr_pwr_state;
+			else
+				msm_fb_release_fences(mfd);
 
 			mfd->op_enable = TRUE;
 		}
@@ -1987,6 +2008,61 @@ static int msm_fb_release(struct fb_info *info, int user)
 
 DEFINE_SEMAPHORE(msm_fb_pan_sem);
 
+int msm_fb_wait_for_fence(struct msm_fb_data_type *mfd)
+{
+	int i, ret = 0;
+
+	for (i = 0; i < mfd->acq_fen_cnt; i++) {
+		int wait_ret = sync_fence_wait(mfd->acq_fen[i],
+			WAIT_FENCE_TIMEOUT);
+
+		if (wait_ret < 0) {
+			pr_err("%s: fence %d wait failed: %d\n",
+				__func__, i, wait_ret);
+			if (!ret)
+				ret = wait_ret;
+		}
+		sync_fence_put(mfd->acq_fen[i]);
+		mfd->acq_fen[i] = NULL;
+	}
+	mfd->acq_fen_cnt = 0;
+	return ret;
+}
+
+static void msm_fb_advance_timeline(struct msm_fb_data_type *mfd, u32 value)
+{
+	mutex_lock(&mfd->sync_mutex);
+	if (mfd->timeline) {
+		sw_sync_timeline_inc(mfd->timeline, value);
+		mfd->timeline_value += value;
+	}
+	mutex_unlock(&mfd->sync_mutex);
+}
+
+int msm_fb_signal_timeline(struct msm_fb_data_type *mfd)
+{
+	msm_fb_advance_timeline(mfd, 2);
+	return 0;
+}
+
+static void msm_fb_release_fences(struct msm_fb_data_type *mfd)
+{
+	int i;
+
+	if (!mfd->timeline)
+		return;
+
+	mutex_lock(&mfd->sync_mutex);
+	for (i = 0; i < mfd->acq_fen_cnt; i++) {
+		sync_fence_put(mfd->acq_fen[i]);
+		mfd->acq_fen[i] = NULL;
+	}
+	mfd->acq_fen_cnt = 0;
+	sw_sync_timeline_inc(mfd->timeline, 2);
+	mfd->timeline_value += 2;
+	mutex_unlock(&mfd->sync_mutex);
+}
+
 static int msm_fb_pan_display(struct fb_var_screeninfo *var,
 			      struct fb_info *info)
 {
@@ -2067,11 +2143,16 @@ static int msm_fb_pan_display(struct fb_var_screeninfo *var,
 	mutex_unlock(&msm_fb_notify_update_sem);
 
 	down(&msm_fb_pan_sem);
+	mutex_lock(&mfd->sync_mutex);
+	msm_fb_wait_for_fence(mfd);
+	mutex_unlock(&mfd->sync_mutex);
 
 	if (info->node == 0 && !(mfd->cont_splash_done)) { /* primary */
 		mdp_set_dma_pan_info(info, NULL, TRUE);
 		if (msm_fb_blank_sub(FB_BLANK_UNBLANK, info, mfd->op_enable)) {
 			pr_err("%s: can't turn on display!\n", __func__);
+			msm_fb_advance_timeline(mfd, 2);
+			up(&msm_fb_pan_sem);
 			return -EINVAL;
 		}
 	}
@@ -2079,6 +2160,7 @@ static int msm_fb_pan_display(struct fb_var_screeninfo *var,
 	mdp_set_dma_pan_info(info, dirtyPtr,
 			     (var->activate == FB_ACTIVATE_VBL));
 	mdp_dma_pan_update(info);
+	msm_fb_signal_timeline(mfd);
 	up(&msm_fb_pan_sem);
 
 	if (unset_bl_level && !bl_updated) {
@@ -3617,6 +3699,133 @@ static int msmfb_handle_pp_ioctl(struct msm_fb_data_type *mfd,
 	return ret;
 }
 
+static int msmfb_handle_buf_sync_ioctl(struct msm_fb_data_type *mfd,
+	struct mdp_buf_sync *buf_sync)
+{
+	int acq_fds[MDP_MAX_FENCE_FD];
+	struct sync_pt *release_pt = NULL, *retire_pt = NULL;
+	struct sync_fence *release_fence = NULL, *retire_fence = NULL;
+	int release_fd = -1, retire_fd = -1;
+	int i, ret = 0;
+
+	if (!mfd->timeline ||
+		buf_sync->acq_fen_fd_cnt > MDP_MAX_FENCE_FD)
+		return -EINVAL;
+	if (!mfd->op_enable || !mfd->panel_power_on)
+		return -EPERM;
+
+	if (buf_sync->acq_fen_fd_cnt &&
+		copy_from_user(acq_fds, buf_sync->acq_fen_fd,
+			buf_sync->acq_fen_fd_cnt * sizeof(acq_fds[0])))
+		return -EFAULT;
+
+	mutex_lock(&mfd->sync_mutex);
+	if (mfd->acq_fen_cnt) {
+		ret = -EBUSY;
+		goto out_unlock;
+	}
+
+	for (i = 0; i < buf_sync->acq_fen_fd_cnt; i++) {
+		mfd->acq_fen[i] = sync_fence_fdget(acq_fds[i]);
+		if (!mfd->acq_fen[i]) {
+			ret = -EINVAL;
+			goto err_acquire;
+		}
+		mfd->acq_fen_cnt++;
+	}
+
+	if (buf_sync->flags & MDP_BUF_SYNC_FLAG_WAIT)
+		msm_fb_wait_for_fence(mfd);
+
+	release_fd = get_unused_fd_flags(0);
+	if (release_fd < 0) {
+		ret = release_fd;
+		goto err_acquire;
+	}
+	retire_fd = get_unused_fd_flags(0);
+	if (retire_fd < 0) {
+		ret = retire_fd;
+		goto err_release_fd;
+	}
+
+	release_pt = sw_sync_pt_create(mfd->timeline,
+		mfd->timeline_value + 1);
+	if (!release_pt) {
+		ret = -ENOMEM;
+		goto err_retire_fd;
+	}
+	release_fence = sync_fence_create("mdp-fence", release_pt);
+	if (!release_fence) {
+		sync_pt_free(release_pt);
+		ret = -ENOMEM;
+		goto err_retire_fd;
+	}
+
+	retire_pt = sw_sync_pt_create(mfd->timeline,
+		mfd->timeline_value + 2);
+	if (!retire_pt) {
+		ret = -ENOMEM;
+		goto err_release_fence;
+	}
+	retire_fence = sync_fence_create("mdp-retire-fence", retire_pt);
+	if (!retire_fence) {
+		sync_pt_free(retire_pt);
+		ret = -ENOMEM;
+		goto err_release_fence;
+	}
+
+	if (copy_to_user(buf_sync->rel_fen_fd, &release_fd,
+			sizeof(release_fd)) ||
+		copy_to_user(buf_sync->retire_fen_fd, &retire_fd,
+			sizeof(retire_fd))) {
+		ret = -EFAULT;
+		goto err_retire_fence;
+	}
+
+	sync_fence_install(release_fence, release_fd);
+	sync_fence_install(retire_fence, retire_fd);
+	mutex_unlock(&mfd->sync_mutex);
+	return 0;
+
+err_retire_fence:
+	sync_fence_put(retire_fence);
+err_release_fence:
+	sync_fence_put(release_fence);
+err_retire_fd:
+	put_unused_fd(retire_fd);
+err_release_fd:
+	put_unused_fd(release_fd);
+err_acquire:
+	for (i = 0; i < mfd->acq_fen_cnt; i++) {
+		sync_fence_put(mfd->acq_fen[i]);
+		mfd->acq_fen[i] = NULL;
+	}
+	mfd->acq_fen_cnt = 0;
+out_unlock:
+	mutex_unlock(&mfd->sync_mutex);
+	return ret;
+}
+
+static int msmfb_display_commit(struct fb_info *info, void __user *argp)
+{
+	struct msm_fb_data_type *mfd = info->par;
+	struct mdp_display_commit commit;
+	int mixer;
+
+	if (copy_from_user(&commit, argp, sizeof(commit)))
+		return -EFAULT;
+	if (!mfd->op_enable || !mfd->panel_power_on)
+		return -EPERM;
+
+	if (commit.flags & MDP_DISPLAY_COMMIT_OVERLAY) {
+		mixer = mfd->panel_info.pdest == DISPLAY_1 ?
+			MDP4_MIXER0 : MDP4_MIXER1;
+		return mdp4_overlay_commit(info, mixer);
+	}
+
+	return msm_fb_pan_display(&commit.var, info);
+}
+
 static int msmfb_handle_metadata_ioctl(struct msm_fb_data_type *mfd,
 				struct msmfb_metadata *metadata_ptr)
 {
@@ -3653,6 +3862,7 @@ static int msm_fb_ioctl(struct fb_info *info, unsigned int cmd,
 #endif
 	struct mdp_page_protection fb_page_protection;
 	struct msmfb_mdp_pp mdp_pp;
+	struct mdp_buf_sync buf_sync;
 	struct msmfb_metadata mdp_metadata;
 	int ret = 0;
 
@@ -3949,6 +4159,17 @@ static int msm_fb_ioctl(struct fb_info *info, unsigned int cmd,
 		ret = msmfb_handle_pp_ioctl(mfd, &mdp_pp);
 		break;
 
+	case MSMFB_BUFFER_SYNC:
+		if (copy_from_user(&buf_sync, argp, sizeof(buf_sync)))
+			return -EFAULT;
+		ret = msmfb_handle_buf_sync_ioctl(mfd, &buf_sync);
+		break;
+
+	case MSMFB_DISPLAY_COMMIT:
+		ret = msmfb_display_commit(info, argp);
+		break;
+
+	case MSMFB_METADATA_SET_OLD:
 	case MSMFB_METADATA_SET:
 		ret = copy_from_user(&mdp_metadata, argp, sizeof(mdp_metadata));
 		if (ret)

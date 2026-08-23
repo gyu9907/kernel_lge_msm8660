@@ -3546,6 +3546,9 @@ int mdp4_overlay_commit(struct fb_info *info, int mixer)
 	mutex_lock(&mfd->dma->ov_mutex);
 
 	mdp4_overlay_mdp_perf_upd(mfd, 1);
+	mutex_lock(&mfd->sync_mutex);
+	msm_fb_wait_for_fence(mfd);
+	mutex_unlock(&mfd->sync_mutex);
 
 	if (mixer == MDP4_MIXER0) {
 		if (ctrl->panel_mode & MDP4_PANEL_DSI_CMD) {
@@ -3564,6 +3567,7 @@ int mdp4_overlay_commit(struct fb_info *info, int mixer)
 	}
 
 	mdp4_overlay_mdp_perf_upd(mfd, 0);
+	msm_fb_signal_timeline(mfd);
 
 	mutex_unlock(&mfd->dma->ov_mutex);
 

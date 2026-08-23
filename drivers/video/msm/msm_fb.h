@@ -33,6 +33,8 @@
 #include <linux/spinlock.h>
 #include <linux/workqueue.h>
 #include <linux/hrtimer.h>
+#include <linux/sync.h>
+#include <linux/sw_sync.h>
 
 #include <linux/fb.h>
 #include <linux/list.h>
@@ -190,6 +192,11 @@ struct msm_fb_data_type {
 	u32 writeback_state;
 	bool writeback_active_cnt;
 	int cont_splash_done;
+	u32 acq_fen_cnt;
+	struct sync_fence *acq_fen[MDP_MAX_FENCE_FD];
+	struct sw_sync_timeline *timeline;
+	u32 timeline_value;
+	struct mutex sync_mutex;
 	int vsync_sysfs_created;
 };
 
@@ -197,6 +204,8 @@ struct dentry *msm_fb_get_debugfs_root(void);
 void msm_fb_debugfs_file_create(struct dentry *root, const char *name,
 				u32 *var);
 void msm_fb_set_backlight(struct msm_fb_data_type *mfd, __u32 bkl_lvl);
+int msm_fb_wait_for_fence(struct msm_fb_data_type *mfd);
+int msm_fb_signal_timeline(struct msm_fb_data_type *mfd);
 
 struct platform_device *msm_fb_add_device(struct platform_device *pdev);
 struct fb_info *msm_fb_get_writeback_fb(void);

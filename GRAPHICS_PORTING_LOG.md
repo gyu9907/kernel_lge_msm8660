@@ -44,3 +44,33 @@ Validation:
   `out/target/product/batman_lgu/boot.img` built successfully.
 - Build configuration still reports duplicate source/vendor display HAL output
   producers. This must be resolved before a full ROM validation.
+
+## Stage D/E1: MDP buffer sync and display commit
+
+Reference commits:
+
+- `df5f3c82303` - msm: display: Buffer sync point support
+- `028d03daff2` - msm: display: buffer sync point update
+- `182c21fbfa2` - msm: mdp: Release all fences on blank
+- `2f3c438ffec` - msm: display: buf sync enhancement
+- `76f0c66f9e9` - msm: display: add display commit ioctl
+- `309c0ca6eb7` - msm_fb: display: Consolidate commit ioctls
+
+Adaptation notes:
+
+- Added CM11 `MSMFB_BUFFER_SYNC` ioctl 162 with up to ten acquire fences and
+  release/retire fence output.
+- Added `MSMFB_DISPLAY_COMMIT` ioctl 164 and connected overlay commits to the
+  existing LG MDP4 mixer-specific commit implementation.
+- Kept the CM10 `MSMFB_OVERLAY_COMMIT` path and distinguished the legacy LG
+  metadata ioctl at number 162 by its encoded structure size. Metadata number
+  166 is also supported for the CM11-built userspace.
+- Fence fds are installed only after both output values are copied successfully,
+  so failures can use `put_unused_fd()` without touching an installed file.
+- Panel blank drops pending acquire references and advances the timeline so
+  release/retire fences cannot remain indefinitely pending.
+
+Validation:
+
+- `make bootimage -j16`: passed; `msm_fb.o`, `mdp4_overlay.o`, vmlinux, zImage,
+  modules and boot image built successfully.
