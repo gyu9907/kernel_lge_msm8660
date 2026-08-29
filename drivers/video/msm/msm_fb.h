@@ -39,10 +39,7 @@
 #include <linux/types.h>
 
 #include <linux/msm_mdp.h>
-#ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
-#endif
-
 #include "msm_fb_panel.h"
 #include "mdp.h"
 
@@ -54,6 +51,7 @@ struct disp_info_type_suspend {
 	boolean op_enable;
 	boolean sw_refreshing_enable;
 	boolean panel_power_on;
+	boolean op_suspend;
 };
 
 struct msmfb_writeback_data_list {
@@ -67,7 +65,6 @@ struct msmfb_writeback_data_list {
 	int state;
 };
 
-
 struct msm_fb_data_type {
 	__u32 key;
 	__u32 index;
@@ -80,7 +77,7 @@ struct msm_fb_data_type {
 	DISP_TARGET dest;
 	struct fb_info *fbi;
 
-	struct device *dev;
+	struct delayed_work backlight_worker;
 	boolean op_enable;
 	uint32 fb_imgType;
 	boolean sw_currently_refreshing;
@@ -191,6 +188,24 @@ struct msm_fb_data_type {
 	bool writeback_active_cnt;
 	int cont_splash_done;
 	int vsync_sysfs_created;
+	u32 acq_fen_cnt;
+	struct sync_fence *acq_fen[MDP_MAX_FENCE_FD];
+	struct sw_sync_timeline *timeline;
+	int timeline_value;
+	struct mutex sync_mutex;
+	struct completion commit_comp;
+	u32 is_committing;
+	struct task_struct *commit_thread;
+	wait_queue_head_t commit_queue;
+	int wake_commit_thread;
+	void *msm_fb_backup;
+	boolean panel_driver_on;
+	void *cpu_pm_hdl;
+	uint32 sec_mapped;
+};
+struct msm_fb_backup_type {
+	struct fb_info info;
+	struct mdp_display_commit disp_commit;
 };
 
 struct dentry *msm_fb_get_debugfs_root(void);
@@ -210,7 +225,9 @@ int msm_fb_writeback_stop(struct fb_info *info);
 int msm_fb_writeback_terminate(struct fb_info *info);
 int msm_fb_detect_client(const char *name);
 int calc_fb_offset(struct msm_fb_data_type *mfd, struct fb_info *fbi, int bpp);
-
+void msm_fb_wait_for_fence(struct msm_fb_data_type *mfd);
+int msm_fb_signal_timeline(struct msm_fb_data_type *mfd);
+void msm_fb_release_timeline(struct msm_fb_data_type *mfd);
 #ifdef CONFIG_FB_BACKLIGHT
 void msm_fb_config_backlight(struct msm_fb_data_type *mfd);
 #endif
@@ -221,7 +238,9 @@ int msm_fb_check_frame_rate(struct msm_fb_data_type *mfd,
 				struct fb_info *info);
 
 #ifdef CONFIG_FB_MSM_LOGO
-#if 0 /*                                        */
+#ifdef CONFIG_LGE_I_DISP_BOOTLOGO
+#define INIT_IMAGE_FILE "/bootimages/boot_logo_00000.rle"
+#else
 #define INIT_IMAGE_FILE "/initlogo.rle"
 #endif
 int load_565rle_image(char *filename, bool bf_supported);
