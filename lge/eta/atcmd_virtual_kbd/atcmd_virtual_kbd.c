@@ -78,7 +78,7 @@ static int atcmd_virtual_probe(struct platform_device *pdev)
 	
 	for (key_idx = 0; key_idx <= atcmd_virtual_kbd_dev->keycodemax; key_idx++) {
 		keycode = atcmd_virtual_pdata->keycode[2 * key_idx];
-		if (keycode != KEY_UNKNOWN)
+		if (keycode != KEY_UNKNOWN && keycode != KEY_Q)
 			set_bit(keycode, atcmd_virtual_kbd_dev->keybit);
 	}
 
