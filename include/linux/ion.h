@@ -51,6 +51,8 @@ enum ion_heap_type {
 #define ION_HEAP_CARVEOUT_MASK		(1 << ION_HEAP_TYPE_CARVEOUT)
 #define ION_HEAP_CP_MASK		(1 << ION_HEAP_TYPE_CP)
 
+#define ION_FLAG_CACHED 1
+
 
 /**
  * These are the only ids that should be used for Ion heap ids.
@@ -103,6 +105,17 @@ enum cp_mem_usage {
  */
 #define ION_HEAP(bit) (1 << (bit))
 
+#define ion_full_heap_mask (ION_HEAP(ION_CP_MM_HEAP_ID) | \
+			   ION_HEAP(ION_CP_MFC_HEAP_ID) | \
+			   ION_HEAP(ION_CP_WB_HEAP_ID) | \
+			   ION_HEAP(ION_CAMERA_HEAP_ID) | \
+			   ION_HEAP(ION_SF_HEAP_ID) | \
+			   ION_HEAP(ION_IOMMU_HEAP_ID) | \
+			   ION_HEAP(ION_QSECOM_HEAP_ID) | \
+			   ION_HEAP(ION_AUDIO_HEAP_ID) | \
+			   ION_HEAP(ION_MM_FIRMWARE_HEAP_ID) | \
+			   ION_HEAP(ION_SYSTEM_HEAP_ID))
+
 #define ION_VMALLOC_HEAP_NAME	"vmalloc"
 #define ION_AUDIO_HEAP_NAME	"audio"
 #define ION_SF_HEAP_NAME	"sf"
@@ -118,11 +131,9 @@ enum cp_mem_usage {
 #define CACHED          1
 #define UNCACHED        0
 
-#define ION_CACHE_SHIFT 0
-
-#define ION_SET_CACHE(__cache)  ((__cache) << ION_CACHE_SHIFT)
-
-#define ION_IS_CACHED(__flags)	((__flags) & (1 << ION_CACHE_SHIFT))
+#define ION_SET_CACHED(__flags)		((__flags) | ION_FLAG_CACHED)
+#define ION_SET_UNCACHED(__flags)	((__flags) & ~ION_FLAG_CACHED)
+#define ION_IS_CACHED(__flags)		((__flags) & ION_FLAG_CACHED)
 
 /*
  * This flag allows clients when mapping into the IOMMU to specify to
@@ -312,7 +323,8 @@ void ion_client_destroy(struct ion_client *client);
  * an opaque handle to it.
  */
 struct ion_handle *ion_alloc(struct ion_client *client, size_t len,
-			     size_t align, unsigned int flags);
+			     size_t align, unsigned int heap_mask,
+			     unsigned int flags);
 
 /**
  * ion_free - free a handle
@@ -574,7 +586,8 @@ static inline struct ion_client *msm_ion_client_create(unsigned int heap_mask,
 static inline void ion_client_destroy(struct ion_client *client) { }
 
 static inline struct ion_handle *ion_alloc(struct ion_client *client,
-			size_t len, size_t align, unsigned int flags)
+			size_t len, size_t align, unsigned int heap_mask,
+			unsigned int flags)
 {
 	return ERR_PTR(-ENODEV);
 }
@@ -704,6 +717,14 @@ static inline int msm_ion_do_cache_op(struct ion_client *client,
 struct ion_allocation_data {
 	size_t len;
 	size_t align;
+	unsigned int heap_mask;
+	unsigned int flags;
+	struct ion_handle *handle;
+};
+
+struct ion_allocation_data_compat {
+	size_t len;
+	size_t align;
 	unsigned int flags;
 	struct ion_handle *handle;
 };
@@ -788,6 +809,9 @@ struct ion_flag_data {
  */
 #define ION_IOC_ALLOC		_IOWR(ION_IOC_MAGIC, 0, \
 				      struct ion_allocation_data)
+
+#define ION_IOC_ALLOC_COMPAT	_IOWR(ION_IOC_MAGIC, 0, \
+				      struct ion_allocation_data_compat)
 
 /**
  * DOC: ION_IOC_FREE - free memory

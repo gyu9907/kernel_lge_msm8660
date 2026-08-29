@@ -231,6 +231,7 @@ static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
 
 	buffer->dev = dev;
 	buffer->size = len;
+	buffer->flags = flags;
 
 	table = buffer->heap->ops->map_dma(buffer->heap, buffer);
 	if (IS_ERR_OR_NULL(table)) {
@@ -411,7 +412,8 @@ static void ion_handle_add(struct ion_client *client, struct ion_handle *handle)
 }
 
 struct ion_handle *ion_alloc(struct ion_client *client, size_t len,
-			     size_t align, unsigned int flags)
+			     size_t align, unsigned int heap_mask,
+			     unsigned int flags)
 {
 	struct rb_node *n;
 	struct ion_handle *handle;
@@ -442,7 +444,7 @@ struct ion_handle *ion_alloc(struct ion_client *client, size_t len,
 		if (!((1 << heap->type) & client->heap_mask))
 			continue;
 		/* if the caller didn't specify this heap type */
-		if (!((1 << heap->id) & flags))
+		if (!((1 << heap->id) & heap_mask))
 			continue;
 		/* Do not allow un-secure heap if secure is specified */
 		if (secure_allocation && (heap->type != ION_HEAP_TYPE_CP))
@@ -1256,9 +1258,11 @@ static int ion_share_set_flags(struct ion_client *client,
 {
 	struct ion_buffer *buffer;
 	bool valid_handle;
-	unsigned long ion_flags = ION_SET_CACHE(CACHED);
+	unsigned long ion_flags = 0;
 	if (flags & O_DSYNC)
-		ion_flags = ION_SET_CACHE(UNCACHED);
+		ion_flags = ION_SET_UNCACHED(ion_flags);
+	else
+		ion_flags = ION_SET_CACHED(ion_flags);
 
 	mutex_lock(&client->lock);
 	valid_handle = ion_handle_validate(client, handle);
@@ -1359,7 +1363,25 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		if (copy_from_user(&data, (void __user *)arg, sizeof(data)))
 			return -EFAULT;
 		data.handle = ion_alloc(client, data.len, data.align,
-					     data.flags);
+					     data.heap_mask, data.flags);
+
+		if (IS_ERR(data.handle))
+			return PTR_ERR(data.handle);
+
+		if (copy_to_user((void __user *)arg, &data, sizeof(data))) {
+			ion_free(client, data.handle);
+			return -EFAULT;
+		}
+		break;
+	}
+	case ION_IOC_ALLOC_COMPAT:
+	{
+		struct ion_allocation_data_compat data;
+
+		if (copy_from_user(&data, (void __user *)arg, sizeof(data)))
+			return -EFAULT;
+		data.handle = ion_alloc(client, data.len, data.align,
+					     ion_full_heap_mask, 0);
 
 		if (IS_ERR(data.handle))
 			return PTR_ERR(data.handle);

@@ -1624,7 +1624,7 @@ unsigned char hdmi_is_primary;
 #if 1 /*                                                        */
 #define MSM_PMEM_KERNEL_EBI1_SIZE	0x600000
 #define MSM_PMEM_ADSP_SIZE			0x2000000
-#define MSM_PMEM_AUDIO_SIZE			0x28B000
+#define MSM_PMEM_AUDIO_SIZE			0x4CF000
 
 #define MSM_SMI_BASE				0x38000000
 #define MSM_SMI_SIZE				0x4000000
@@ -8113,8 +8113,6 @@ MACHINE_START(LGE_325_BOARD, "LGE LGE BOARD MSM8X60")
 	.restart = msm_restart,
 #endif
 	MACHINE_END
-
-
 
 
 

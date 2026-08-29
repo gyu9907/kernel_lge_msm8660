@@ -92,7 +92,7 @@ static int configure_uart_gpios(int on)
 		}
 	}
 	if (ret)
-		for (; i >= 0; i--)
+		while (--i >= 0)
 			msm_gpiomux_put(uart_gpios[i]);
 	return ret;
 }
@@ -113,10 +113,13 @@ static int configure_pcm_gpios(int on)
 		}
 	}
 	if (ret)
-		for (; i >= 0; i--)
+		while (--i >= 0)
 			msm_gpiomux_put(pcm_gpios[i]);
 	return ret;
-} 
+}
+
+static bool bt_gpios_active;
+
 static int batman_bluetooth_power(int on)
 {
   int ret, pin;
@@ -125,6 +128,8 @@ static int batman_bluetooth_power(int on)
 
   if(on)
     {
+	  if (bt_gpios_active)
+		return 0;
 
       if(configure_uart_gpios(1))
         {
@@ -135,8 +140,11 @@ static int batman_bluetooth_power(int on)
       if(configure_pcm_gpios(1))
         {
           printk(KERN_ERR "bluetooth_power on fail");
+	  configure_uart_gpios(0);
           return -EIO;
         }
+
+	  bt_gpios_active = true;
 
       for (pin = 0; pin < ARRAY_SIZE(bt_config_power_on); pin++)
         {
@@ -157,6 +165,10 @@ static int batman_bluetooth_power(int on)
     {
       gpio_direction_output(BT_RESET_N,0);
 
+	  /* rfkill may request the initial off state before any power-on. */
+	  if (!bt_gpios_active)
+		goto configure_power_off;
+
       if(configure_uart_gpios(0))
         {
           printk(KERN_ERR"bluetooth_power on fail");
@@ -169,6 +181,9 @@ static int batman_bluetooth_power(int on)
           return -EIO;
         }
 
+	  bt_gpios_active = false;
+
+configure_power_off:
       for (pin = 0; pin < ARRAY_SIZE(bt_config_power_off); pin++)
         {
           ret = gpio_tlmm_config(bt_config_power_off[pin],GPIO_CFG_ENABLE);
