@@ -617,7 +617,7 @@ void ddl_vidc_encode_init_codec(struct ddl_client_context *ddl)
 		[ddl->command_channel], hdr_ext_control,
 		r_cframe_skip, false, 0,
 		h263_cpfc_enable, encoder->sps_pps.sps_pps_for_idr_enable_flag,
-		encoder->closed_gop);
+		encoder->pic_order_cnt_type, encoder->closed_gop);
 	vidc_sm_set_encoder_init_rc_value(&ddl->shared_mem
 		[ddl->command_channel],
 		encoder->target_bit_rate.target_bitrate);
