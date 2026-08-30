@@ -545,6 +545,25 @@ static u32 ddl_set_enc_property(struct ddl_client_context *ddl,
 	case VCD_I_REQ_IFRAME:
 		vcd_status = VCD_S_SUCCESS;
 		break;
+	case VCD_I_PIC_ORDER_CNT_TYPE:
+	{
+		struct vcd_property_pic_order_cnt_type *poc =
+			(struct vcd_property_pic_order_cnt_type *)property_value;
+
+		if (sizeof(*poc) == property_hdr->sz &&
+			encoder->codec.codec == VCD_CODEC_H264 &&
+			(poc->poc_type == 0 || poc->poc_type == 2)) {
+			if (encoder->i_period.b_frames && poc->poc_type) {
+				DDL_MSG_HIGH("bframes = %d. Setting poc to 0",
+					encoder->i_period.b_frames);
+				encoder->pic_order_cnt_type = 0;
+			} else {
+				encoder->pic_order_cnt_type = poc->poc_type;
+			}
+			vcd_status = VCD_S_SUCCESS;
+		}
+		break;
+	}
 	case VCD_I_INTRA_PERIOD:
 	{
 		struct vcd_property_i_period *i_period =
@@ -1529,6 +1548,15 @@ static u32 ddl_get_enc_property(struct ddl_client_context *ddl,
 			vcd_status = VCD_S_SUCCESS;
 		}
 		break;
+	case VCD_I_PIC_ORDER_CNT_TYPE:
+		if (sizeof(struct vcd_property_pic_order_cnt_type) ==
+			property_hdr->sz) {
+			((struct vcd_property_pic_order_cnt_type *)
+				property_value)->poc_type =
+					encoder->pic_order_cnt_type;
+			vcd_status = VCD_S_SUCCESS;
+		}
+		break;
 	default:
 		vcd_status = VCD_ERR_ILLEGAL_OP;
 		break;
@@ -1574,6 +1602,12 @@ static u32 ddl_set_enc_dynamic_property(struct ddl_client_context *ddl,
 			property_hdr->sz) {
 			encoder->i_period = *i_period;
 			dynamic_prop_change = DDL_ENC_CHANGE_IPERIOD;
+			if (encoder->i_period.b_frames &&
+				encoder->pic_order_cnt_type) {
+				DDL_MSG_HIGH("bframes = %d. Setting poc to 0",
+					encoder->i_period.b_frames);
+				encoder->pic_order_cnt_type = 0;
+			}
 			vcd_status = VCD_S_SUCCESS;
 		}
 	}
@@ -1683,6 +1717,7 @@ static void ddl_set_default_enc_property(struct ddl_client_context *ddl)
 	encoder->hdr_ext_control = 0;
 	encoder->mb_info_enable  = false;
 	encoder->num_references_for_p_frame = DDL_MIN_NUM_REF_FOR_P_FRAME;
+	encoder->pic_order_cnt_type = 0;
 	if (encoder->codec.codec == VCD_CODEC_MPEG4)
 		encoder->closed_gop = true;
 	ddl_set_default_metadata_flag(ddl);

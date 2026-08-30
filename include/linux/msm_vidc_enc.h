@@ -458,8 +458,19 @@ struct venc_ioctl_msg{
 #define VEN_IOCTL_SET_SLICE_DELIVERY_MODE \
 	_IO(VEN_IOCTLBASE_ENC, 50)
 
+/* IOCTL params: SET: InputData - venc_poctype, OutputData - NULL. */
+#define VEN_IOCTL_SET_PIC_ORDER_CNT_TYPE \
+	_IOW(VEN_IOCTLBASE_ENC, 66, struct venc_ioctl_msg)
+/* IOCTL params: GET: InputData - NULL, OutputData - venc_poctype. */
+#define VEN_IOCTL_GET_PIC_ORDER_CNT_TYPE \
+	_IOR(VEN_IOCTLBASE_ENC, 67, struct venc_ioctl_msg)
+
 struct venc_switch{
 	unsigned char	status;
+};
+
+struct venc_poctype {
+	unsigned long poc_type;
 };
 
 struct venc_allocatorproperty{
