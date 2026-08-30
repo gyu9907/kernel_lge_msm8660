@@ -50,7 +50,6 @@ static dev_t vid_enc_dev_num;
 static struct class *vid_enc_class;
 static long vid_enc_ioctl(struct file *file,
 	unsigned cmd, unsigned long arg);
-static int stop_cmd;
 
 static s32 vid_enc_get_empty_client_index(void)
 {
@@ -476,7 +475,7 @@ static u32 vid_enc_close_client(struct video_client_ctx *client_ctx)
 
 	mutex_lock(&vid_enc_device_p->lock);
 
-	if (!stop_cmd) {
+	if (!client_ctx->stop_called) {
 		vcd_status = vcd_stop(client_ctx->vcd_handle);
 		DBG("Waiting for VCD_STOP: Before Timeout\n");
 		if (!vcd_status) {
@@ -513,7 +512,7 @@ static u32 vid_enc_close_client(struct video_client_ctx *client_ctx)
 		sizeof(struct video_client_ctx));
 
 	vid_enc_device_p->num_clients--;
-	stop_cmd = 0;
+	client_ctx->stop_called = 0;
 	mutex_unlock(&vid_enc_device_p->lock);
 	return true;
 }
@@ -530,7 +529,6 @@ static int vid_enc_open(struct inode *inode, struct file *file)
 
 	mutex_lock(&vid_enc_device_p->lock);
 
-	stop_cmd = 0;
 	client_count = vcd_get_num_of_clients();
 	if (client_count == VIDC_MAX_NUM_CLIENTS) {
 		ERR("ERROR : vid_enc_open() max number of clients"
@@ -562,6 +560,9 @@ static int vid_enc_open(struct inode *inode, struct file *file)
 	mutex_init(&client_ctx->enrty_queue_lock);
 	INIT_LIST_HEAD(&client_ctx->msg_queue);
 	init_waitqueue_head(&client_ctx->msg_wait);
+	/* A newly opened client has never been started, so release must not
+	 * issue VCD_STOP and wait for a completion that can never arrive. */
+	client_ctx->stop_called = 1;
 	if (vcd_get_ion_status()) {
 		client_ctx->user_ion_client = vcd_get_ion_client();
 		if (!client_ctx->user_ion_client) {
@@ -936,7 +937,8 @@ static long vid_enc_ioctl(struct file *file,
 		if (!result) {
 			ERR("setting VEN_IOCTL_CMD_START failed\n");
 			return -EIO;
-		}
+		} else
+			client_ctx->stop_called = 0;
 		break;
 	}
 	case VEN_IOCTL_CMD_STOP:
@@ -947,7 +949,7 @@ static long vid_enc_ioctl(struct file *file,
 			ERR("setting VEN_IOCTL_CMD_STOP failed\n");
 			return -EIO;
 		}
-		stop_cmd = 1;
+		client_ctx->stop_called = 1;
 		break;
 	}
 	case VEN_IOCTL_CMD_PAUSE:
