@@ -998,7 +998,8 @@ static u32 ddl_process_intr_status(struct ddl_context *ddl_context,
 			ddl_dpb_buffers_set_done_callback(ddl_context);
 	break;
 	default:
-		DDL_MSG_LOW("UNKWN_INTR");
+		vidc_1080p_clear_axi_error();
+		return_status = false;
 	break;
 	}
 	return return_status;

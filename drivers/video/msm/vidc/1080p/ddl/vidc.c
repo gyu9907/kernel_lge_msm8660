@@ -13,6 +13,33 @@
 
 #include "vidc.h"
 #include "vidc_hwio.h"
+#include <linux/delay.h>
+#include <linux/ratelimit.h>
+
+/* CAF 54cfe9da3: MGEN2MAXI can interrupt without a firmware response.
+ * Called from the serialized IRQ worker, never from the hard IRQ handler.
+ * Acknowledge only reported bus errors; do not reset the codec or manufacture
+ * a frame completion. Preserve the configured halt/watchdog policy.
+ */
+void vidc_1080p_clear_axi_error(void)
+{
+	u32 status, control;
+
+	VIDC_HWIO_IN(REG_437878, &status);
+	if (!(status & (HWIO_REG_437878_AXI_WDTIMEOUT_INTR_BMSK |
+		HWIO_REG_437878_AXI_ERR_INTR_BMSK))) {
+		pr_warn_ratelimited("VIDC: unknown IRQ axi_status=%x\n",
+			status);
+		return;
+	}
+	VIDC_HWIO_IN(REG_471159, &control);
+	pr_err_ratelimited("VIDC: AXI fault status=%x\n", status);
+	VIDC_HWIO_OUT(REG_471159,
+		control | HWIO_REG_471159_AXI_INTR_CLR_BMSK);
+	msleep(20);
+	VIDC_HWIO_OUT(REG_471159,
+		control & ~HWIO_REG_471159_AXI_INTR_CLR_BMSK);
+}
 
 
 #define VIDC_1080P_INIT_CH_INST_ID      0x0000ffff
