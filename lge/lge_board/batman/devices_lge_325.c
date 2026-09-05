@@ -2637,7 +2637,9 @@ struct msm_vidc_platform_data vidc_platform_data = {
 	.enable_ion = 0,
 #endif
 	.disable_dmx = 0,
-	.disable_fullhd = 0
+	.disable_fullhd = 0,
+	/* Adaptive playback must reserve decoder buffers before sequence parsing. */
+	.cont_mode_dpb_count = 8,
 };
 #else
 struct msm_vidc_platform_data vidc_platform_data = {
