@@ -3365,6 +3365,39 @@ int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req)
 
 	mixer = mfd->panel_info.pdest;	/* DISPLAY_1 or DISPLAY_2 */
 
+	/* Reject video that needs BLT before allocating or changing a live pipe.
+	 * As in pyramid's a3540e3cded, HWC can then use GPU composition without
+	 * exposing a partially updated pipe or switching the MDP into BLT mode.
+	 */
+	if (mfd->mdp_rev == MDP_REV_41 &&
+	    mfd->panel_info.type == MIPI_VIDEO_PANEL &&
+	    mixer == MDP4_MIXER0 &&
+	    mdp4_overlay_format2type(req->src.format) == OVERLAY_TYPE_VIDEO) {
+		struct mdp4_overlay_pipe *probe;
+		u32 required_clk;
+
+		probe = kzalloc(sizeof(*probe), GFP_KERNEL);
+		if (!probe) {
+			mutex_unlock(&mfd->dma->ov_mutex);
+			return -ENOMEM;
+		}
+		probe->src_w = req->src_rect.w & 0x07ff;
+		probe->src_h = req->src_rect.h & 0x07ff;
+		probe->dst_w = req->dst_rect.w & 0x07ff;
+		probe->dst_h = req->dst_rect.h & 0x07ff;
+		probe->flags = req->flags;
+		probe->mixer_num = mixer;
+		ret = mdp4_calc_pipe_mdp_clk(mfd, probe);
+		required_clk = probe->req_clk;
+		kfree(probe);
+		if (!ret && required_clk > mdp_max_clk)
+			ret = -EINVAL;
+		if (ret) {
+			mutex_unlock(&mfd->dma->ov_mutex);
+			return ret;
+		}
+	}
+
 	ret = mdp4_overlay_req2pipe(req, mixer, &pipe, mfd);
 
 	if (ret < 0) {
