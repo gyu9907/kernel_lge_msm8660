@@ -815,6 +815,59 @@ static int bluesleep_write_proc_proto(struct file *file, const char *buffer,
 	return count;
 }
 
+/* Bluedroid uses logical wake requests, unlike the raw legacy btwake GPIO.
+ * Userspace must notify both edges (BT_WAKE_VIA_PROC_NOTIFY_DEASSERT).
+ * Reuse LG's UART/host-wake handling rather than adding a second TX timer.
+ */
+static int bluesleep_write_proc_btwrite(struct file *file, const char *buffer,
+				      unsigned long count, void *data)
+{
+	char request;
+
+	if (!count)
+		return -EINVAL;
+	if (copy_from_user(&request, buffer, 1))
+		return -EFAULT;
+	if (request != '0' && request != '1')
+		return -EINVAL;
+	if (!bsi || !bsi->uport)
+		return -ENODEV;
+
+	if (request == '1') {
+		gpio_set_value(bsi->ext_wake, 0);
+		bluesleep_sleep_wakeup();
+	} else {
+		gpio_set_value(bsi->ext_wake, 1);
+		bluesleep_tx_idle();
+	}
+	return count;
+}
+
+static int bluesleep_write_proc_lpm(struct file *file, const char *buffer,
+				  unsigned long count, void *data)
+{
+	char request;
+	int ret;
+
+	if (!count)
+		return -EINVAL;
+	if (copy_from_user(&request, buffer, 1))
+		return -EFAULT;
+	if (request != '0' && request != '1')
+		return -EINVAL;
+	if (!bsi || !bsi->uport)
+		return -ENODEV;
+
+	if (request == '1') {
+		ret = bluesleep_start();
+		if (ret)
+			return ret;
+	} else {
+		bluesleep_stop();
+	}
+	return count;
+}
+
 static int __init bluesleep_probe(struct platform_device *pdev)
 {
 	int ret;
@@ -992,6 +1045,26 @@ static int __init bluesleep_init(void)
 #endif  //BTA_NOT_USE_ROOT_PERM
 //                                           
 
+	/* Logical Bluedroid ABI; keep proto/btwake for legacy clients. */
+	ent = create_proc_entry("lpm", 0660, sleep_dir);
+	if (!ent) {
+		retval = -ENOMEM;
+		goto fail;
+	}
+	ent->read_proc = bluesleep_read_proc_proto;
+	ent->write_proc = bluesleep_write_proc_lpm;
+	ent->uid = AID_BLUETOOTH;
+	ent->gid = AID_BLUETOOTH;
+
+	ent = create_proc_entry("btwrite", 0220, sleep_dir);
+	if (!ent) {
+		retval = -ENOMEM;
+		goto fail;
+	}
+	ent->write_proc = bluesleep_write_proc_btwrite;
+	ent->uid = AID_BLUETOOTH;
+	ent->gid = AID_BLUETOOTH;
+
 	/* read only proc entries */
 	if (create_proc_read_entry("asleep", 0,
 			sleep_dir, bluesleep_read_proc_asleep, NULL) == NULL) {
@@ -1024,6 +1097,8 @@ static int __init bluesleep_init(void)
 
 fail:
 	remove_proc_entry("asleep", sleep_dir);
+	remove_proc_entry("btwrite", sleep_dir);
+	remove_proc_entry("lpm", sleep_dir);
 	remove_proc_entry("proto", sleep_dir);
 	remove_proc_entry("hostwake", sleep_dir);
 	remove_proc_entry("btwake", sleep_dir);
@@ -1046,6 +1121,8 @@ static void __exit bluesleep_exit(void)
 	platform_driver_unregister(&bluesleep_driver);
 
 	remove_proc_entry("asleep", sleep_dir);
+	remove_proc_entry("btwrite", sleep_dir);
+	remove_proc_entry("lpm", sleep_dir);
 	remove_proc_entry("proto", sleep_dir);
 	remove_proc_entry("hostwake", sleep_dir);
 	remove_proc_entry("btwake", sleep_dir);
