@@ -2664,7 +2664,8 @@ int android_bind_factory(acc_cable_type usb_cable_type)
         usb_gadget_connect(cdev->gadget);
         dev->enabled = true;
     }
-    else if (cdev->desc.idVendor == vid && cdev->desc.idProduct == pid)
+    /* A normal userspace composition may also use the factory USB IDs. */
+    else if (dev->pif_connected)
     {
         if (dev->enabled)
         {
