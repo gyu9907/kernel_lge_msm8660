@@ -30,6 +30,12 @@ struct msm_rotator_buf_sync {
 	int rel_fen_fd;
 };
 
+struct rot_buf_type {
+	struct ion_handle *ihdl;
+	uint32_t write_addr;
+	uint32_t read_addr;
+};
+
 struct msm_rotator_img_info {
 	unsigned int session_id;
 	struct msmfb_img  src;
@@ -50,7 +56,21 @@ struct msm_rotator_data_info {
 	unsigned int version_key;
 	struct msmfb_data src_chroma;
 	struct msmfb_data dst_chroma;
+	uint32_t wait_for_finish;
 };
+
+/* CM11/JB callers omit wait_for_finish and require synchronous completion. */
+struct msm_rotator_data_info_compat {
+	int session_id;
+	struct msmfb_data src;
+	struct msmfb_data dst;
+	unsigned int version_key;
+	struct msmfb_data src_chroma;
+	struct msmfb_data dst_chroma;
+};
+
+#define MSM_ROTATOR_IOCTL_ROTATE_COMPAT \
+	_IOW(MSM_ROTATOR_IOCTL_MAGIC, 2, struct msm_rotator_data_info_compat)
 
 struct msm_rot_clocks {
 	const char *clk_name;
