@@ -1150,7 +1150,8 @@ static struct msm_panel_common_pdata mdp_pdata = {
 #else
 static struct msm_panel_common_pdata mdp_pdata = {
 	//.gpio = MDP_VSYNC_GPIO,
-	.mdp_max_clk = 266667000,
+	/* Batman can stall in MDP4 reset on resume at 266.667 MHz. */
+	.mdp_max_clk = 200000000,
 #ifdef CONFIG_MSM_BUS_SCALING
 	.mdp_bus_scale_table = &mdp_bus_scale_pdata,
 #endif
@@ -1221,6 +1222,6 @@ static void set_mdp_clocks_for_wuxga(void)
 	mdp_1080p_vectors[1].ab = 2000000000;
 	mdp_1080p_vectors[1].ib = 2000000000;
 
-	mdp_pdata.mdp_max_clk = 266667000;
+	mdp_pdata.mdp_max_clk = 200000000;
 }
 #endif
