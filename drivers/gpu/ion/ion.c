@@ -504,6 +504,9 @@ void ion_free(struct ion_client *client, struct ion_handle *handle)
 {
 	bool valid_handle;
 
+	if (IS_ERR_OR_NULL(handle))
+		return;
+
 	BUG_ON(client != handle->client);
 
 	mutex_lock(&client->lock);
@@ -698,12 +701,14 @@ int ion_map_iommu(struct ion_client *client, struct ion_handle *handle,
 	if (!iommu_map) {
 		iommu_map = __ion_iommu_map(buffer, domain_num, partition_num,
 					    align, iova_length, flags, iova);
-		if (!IS_ERR_OR_NULL(iommu_map)) {
-			iommu_map->flags = iommu_flags;
-
-			if (iommu_map->flags & ION_IOMMU_UNMAP_DELAYED)
-				kref_get(&iommu_map->ref);
+		if (IS_ERR_OR_NULL(iommu_map)) {
+			ret = iommu_map ? PTR_ERR(iommu_map) : -ENOMEM;
+			goto out;
 		}
+		iommu_map->flags = iommu_flags;
+
+		if (iommu_map->flags & ION_IOMMU_UNMAP_DELAYED)
+			kref_get(&iommu_map->ref);
 	} else {
 		if (iommu_map->flags != iommu_flags) {
 			pr_err("%s: handle %p is already mapped with iommu flags %lx, trying to map with flags %lx\n",
@@ -795,12 +800,15 @@ void *ion_map_kernel(struct ion_client *client, struct ion_handle *handle,
 		return ERR_PTR(-ENODEV);
 	}
 
+	mutex_lock(&buffer->lock);
+	flags = (buffer->flags & ~ION_FLAG_CACHED) |
+		(flags & ION_FLAG_CACHED);
 	if (ion_validate_buffer_flags(buffer, flags)) {
+		mutex_unlock(&buffer->lock);
 		mutex_unlock(&client->lock);
 		return ERR_PTR(-EEXIST);
 	}
 
-	mutex_lock(&buffer->lock);
 	vaddr = ion_handle_kmap_get(handle);
 	mutex_unlock(&buffer->lock);
 	mutex_unlock(&client->lock);
@@ -821,30 +829,7 @@ void ion_unmap_kernel(struct ion_client *client, struct ion_handle *handle)
 }
 EXPORT_SYMBOL(ion_unmap_kernel);
 
-static int check_vaddr_bounds(unsigned long start, unsigned long end)
-{
-	struct mm_struct *mm = current->active_mm;
-	struct vm_area_struct *vma;
-	int ret = 1;
 
-	if (end < start)
-		goto out;
-
-	down_read(&mm->mmap_sem);
-	vma = find_vma(mm, start);
-	if (vma && vma->vm_start < end) {
-		if (start < vma->vm_start)
-			goto out_up;
-		if (end > vma->vm_end)
-			goto out_up;
-		ret = 0;
-	}
-
-out_up:
-	up_read(&mm->mmap_sem);
-out:
-	return ret;
-}
 
 int ion_do_cache_op(struct ion_client *client, struct ion_handle *handle,
 			void *uaddr, unsigned long offset, unsigned long len,
@@ -862,6 +847,13 @@ int ion_do_cache_op(struct ion_client *client, struct ion_handle *handle,
 	}
 	buffer = handle->buffer;
 	mutex_lock(&buffer->lock);
+
+	if (offset > buffer->size || len > buffer->size - offset)
+		goto out;
+	if (!len) {
+		ret = 0;
+		goto out;
+	}
 
 	if (!ION_IS_CACHED(buffer->flags)) {
 		ret = 0;
@@ -1059,7 +1051,7 @@ int ion_handle_get_flags(struct ion_client *client, struct ion_handle *handle,
 	}
 	buffer = handle->buffer;
 	mutex_lock(&buffer->lock);
-	*flags = buffer->flags;
+	*flags = buffer->flags & (ION_FLAG_CACHED | ION_SECURE);
 	mutex_unlock(&buffer->lock);
 	mutex_unlock(&client->lock);
 
@@ -1256,31 +1248,12 @@ static int ion_share_set_flags(struct ion_client *client,
 				struct ion_handle *handle,
 				unsigned long flags)
 {
-	struct ion_buffer *buffer;
-	bool valid_handle;
-	unsigned long ion_flags = 0;
-	if (flags & O_DSYNC)
-		ion_flags = ION_SET_UNCACHED(ion_flags);
-	else
-		ion_flags = ION_SET_CACHED(ion_flags);
+	bool valid;
 
 	mutex_lock(&client->lock);
-	valid_handle = ion_handle_validate(client, handle);
+	valid = ion_handle_validate(client, handle);
 	mutex_unlock(&client->lock);
-	if (!valid_handle) {
-		WARN(1, "%s: invalid handle passed to set_flags.\n", __func__);
-		return -EINVAL;
-	}
-
-	buffer = handle->buffer;
-
-	mutex_lock(&buffer->lock);
-	if (ion_validate_buffer_flags(buffer, ion_flags)) {
-		mutex_unlock(&buffer->lock);
-		return -EEXIST;
-	}
-	mutex_unlock(&buffer->lock);
-	return 0;
+	return valid ? 0 : -EINVAL;
 }
 
 
@@ -1381,7 +1354,7 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		if (copy_from_user(&data, (void __user *)arg, sizeof(data)))
 			return -EFAULT;
 		data.handle = ion_alloc(client, data.len, data.align,
-					     ion_full_heap_mask, 0);
+				data.flags, data.flags);
 
 		if (IS_ERR(data.handle))
 			return PTR_ERR(data.handle);
@@ -1428,6 +1401,7 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		break;
 	}
 	case ION_IOC_IMPORT:
+	case ION_IOC_IMPORT_COMPAT:
 	{
 		struct ion_fd_data data;
 		int ret = 0;
@@ -1435,8 +1409,10 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				   sizeof(struct ion_fd_data)))
 			return -EFAULT;
 		data.handle = ion_import_dma_buf(client, data.fd);
-		if (IS_ERR(data.handle))
+		if (IS_ERR(data.handle)) {
+			ret = PTR_ERR(data.handle);
 			data.handle = NULL;
+		}
 		if (copy_to_user((void __user *)arg, &data,
 				 sizeof(struct ion_fd_data)))
 			return -EFAULT;
@@ -1457,65 +1433,21 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		return dev->custom_ioctl(client, data.cmd, data.arg);
 	}
 	case ION_IOC_CLEAN_CACHES:
+	case ION_IOC_CLEAN_CACHES_COMPAT:
+		return client->dev->custom_ioctl(client,
+						ION_IOC_CLEAN_CACHES, arg);
 	case ION_IOC_INV_CACHES:
+	case ION_IOC_INV_CACHES_COMPAT:
+		return client->dev->custom_ioctl(client,
+						ION_IOC_INV_CACHES, arg);
 	case ION_IOC_CLEAN_INV_CACHES:
-	{
-		struct ion_flush_data data;
-		unsigned long start, end;
-		struct ion_handle *handle = NULL;
-		int ret;
-
-		if (copy_from_user(&data, (void __user *)arg,
-				sizeof(struct ion_flush_data)))
-			return -EFAULT;
-
-		start = (unsigned long) data.vaddr;
-		end = (unsigned long) data.vaddr + data.length;
-
-		if (check_vaddr_bounds(start, end)) {
-			pr_err("%s: virtual address %p is out of bounds\n",
-				__func__, data.vaddr);
-			return -EINVAL;
-		}
-
-		if (!data.handle) {
-			handle = ion_import_dma_buf(client, data.fd);
-			if (IS_ERR(handle)) {
-				pr_info("%s: Could not import handle: %d\n",
-					__func__, (int)handle);
-				return -EINVAL;
-			}
-		}
-
-		ret = ion_do_cache_op(client,
-					data.handle ? data.handle : handle,
-					data.vaddr, data.offset, data.length,
-					cmd);
-
-		if (!data.handle)
-			ion_free(client, handle);
-
-		if (ret < 0)
-			return ret;
-		break;
-
-	}
+	case ION_IOC_CLEAN_INV_CACHES_COMPAT:
+		return client->dev->custom_ioctl(client,
+						ION_IOC_CLEAN_INV_CACHES, arg);
 	case ION_IOC_GET_FLAGS:
-	{
-		struct ion_flag_data data;
-		int ret;
-		if (copy_from_user(&data, (void __user *)arg,
-				   sizeof(struct ion_flag_data)))
-			return -EFAULT;
-
-		ret = ion_handle_get_flags(client, data.handle, &data.flags);
-		if (ret < 0)
-			return ret;
-		if (copy_to_user((void __user *)arg, &data,
-				 sizeof(struct ion_flag_data)))
-			return -EFAULT;
-		break;
-	}
+	case ION_IOC_GET_FLAGS_COMPAT:
+		return client->dev->custom_ioctl(client,
+						ION_IOC_GET_FLAGS, arg);
 	default:
 		return -ENOTTY;
 	}

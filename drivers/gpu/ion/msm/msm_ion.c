@@ -302,6 +302,22 @@ out:
 static long msm_ion_custom_ioctl(struct ion_client *client,
 				unsigned int cmd, unsigned long arg)
 {
+	/* Some JB clients wrap the old commands in ION_IOC_CUSTOM. */
+	switch (cmd) {
+	case ION_IOC_CLEAN_CACHES_COMPAT:
+		cmd = ION_IOC_CLEAN_CACHES;
+		break;
+	case ION_IOC_INV_CACHES_COMPAT:
+		cmd = ION_IOC_INV_CACHES;
+		break;
+	case ION_IOC_CLEAN_INV_CACHES_COMPAT:
+		cmd = ION_IOC_CLEAN_INV_CACHES;
+		break;
+	case ION_IOC_GET_FLAGS_COMPAT:
+		cmd = ION_IOC_GET_FLAGS;
+		break;
+	}
+
 	switch (cmd) {
 	case ION_IOC_CLEAN_CACHES:
 	case ION_IOC_INV_CACHES:

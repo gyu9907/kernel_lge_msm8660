@@ -3690,11 +3690,11 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req)
 	mutex_lock(&mfd->dma->ov_mutex);
 
 	img = &req->data;
-	get_img(img, info, pipe, 0, &start, &len, &srcp0_file,
+	ret = get_img(img, info, pipe, 0, &start, &len, &srcp0_file,
 		&ps0_need, &srcp0_ihdl);
-	if (len == 0) {
+	if (ret || len == 0) {
 		pr_err("%s: pmem Error\n", __func__);
-		ret = -1;
+		ret = ret ? ret : -EINVAL;
 		goto end;
 	}
 
@@ -3713,11 +3713,11 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req)
 	if (pipe->fetch_plane == OVERLAY_PLANE_PSEUDO_PLANAR) {
 		if (overlay_version > 0) {
 			img = &req->plane1_data;
-			get_img(img, info, pipe, 1, &start, &len, &srcp1_file,
+			ret = get_img(img, info, pipe, 1, &start, &len, &srcp1_file,
 				&p_need, &srcp1_ihdl);
-			if (len == 0) {
+			if (ret || len == 0) {
 				pr_err("%s: Error to get plane1\n", __func__);
-				ret = -EINVAL;
+				ret = ret ? ret : -EINVAL;
 				goto end;
 			}
 			pipe->srcp1_addr = start + img->offset;
@@ -3746,21 +3746,21 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req)
 	} else if (pipe->fetch_plane == OVERLAY_PLANE_PLANAR) {
 		if (overlay_version > 0) {
 			img = &req->plane1_data;
-			get_img(img, info, pipe, 1, &start, &len, &srcp1_file,
+			ret = get_img(img, info, pipe, 1, &start, &len, &srcp1_file,
 				&p_need, &srcp1_ihdl);
-			if (len == 0) {
+			if (ret || len == 0) {
 				pr_err("%s: Error to get plane1\n", __func__);
-				ret = -EINVAL;
+				ret = ret ? ret : -EINVAL;
 				goto end;
 			}
 			pipe->srcp1_addr = start + img->offset;
 
 			img = &req->plane2_data;
-			get_img(img, info, pipe, 2, &start, &len, &srcp2_file,
+			ret = get_img(img, info, pipe, 2, &start, &len, &srcp2_file,
 				&p_need, &srcp2_ihdl);
-			if (len == 0) {
+			if (ret || len == 0) {
 				pr_err("%s: Error to get plane2\n", __func__);
-				ret = -EINVAL;
+				ret = ret ? ret : -EINVAL;
 				goto end;
 			}
 			pipe->srcp2_addr = start + img->offset;
@@ -3864,7 +3864,7 @@ end:
 		put_pmem_file(srcp2_file);
 #endif
 	/* only source may use frame buffer */
-	if (img->flags & MDP_MEMORY_ID_TYPE_FB)
+	if ((req->data.flags & MDP_MEMORY_ID_TYPE_FB) && srcp0_file)
 		fput_light(srcp0_file, ps0_need);
 	return ret;
 }
