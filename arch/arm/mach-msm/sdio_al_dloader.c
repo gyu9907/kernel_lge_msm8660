@@ -21,6 +21,7 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/wakelock.h>
+#include <linux/workqueue.h>
 #include <linux/mmc/card.h>
 #include <linux/dma-mapping.h>
 #include <mach/dma.h>
@@ -76,6 +77,7 @@
 /* FORWARD DECLARATIONS */
 static int sdio_dld_open(struct tty_struct *tty, struct file *file);
 static void sdio_dld_close(struct tty_struct *tty, struct file *file);
+static void sdio_dld_tear_down(struct work_struct *work);
 static int sdio_dld_write_callback(struct tty_struct *tty,
 				   const unsigned char *buf, int count);
 static int sdio_dld_write_room(struct tty_struct *tty);
@@ -167,6 +169,7 @@ const struct file_operations sdio_dld_debug_info_ops = {
 #endif
 
 struct sdio_downloader {
+	struct work_struct cleanup_work;
 	int sdioc_boot_func;
 	struct sdio_dld_wait_event write_callback_event;
 	struct sdio_dld_task dld_main_thread;
@@ -1185,7 +1188,7 @@ static int sdio_dld_open(struct tty_struct *tty, struct file *file)
   */
 static void sdio_dld_close(struct tty_struct *tty, struct file *file)
 {
-	int status = 0;
+	struct sdio_downloader *dld = sdio_dld;
 	struct sdioc_reg_chunk *reg = &sdio_dld->sdio_dloader_data.sdioc_reg;
 
 	/* informing the SDIOC that it can exit boot phase */
@@ -1204,15 +1207,6 @@ static void sdio_dld_close(struct tty_struct *tty, struct file *file)
 	del_timer_sync(&sdio_dld->push_timer);
 
 	sdio_dld_dealloc_local_buffers();
-
-	tty_unregister_device(sdio_dld->tty_drv, 0);
-
-	status = tty_unregister_driver(sdio_dld->tty_drv);
-
-	if (status) {
-		pr_err(MODULE_NAME ": %s - tty_unregister_driver() failed\n",
-		       __func__);
-	}
 
 #ifdef CONFIG_DEBUG_FS
 	gd.curr_i = curr_index;
@@ -1263,9 +1257,29 @@ static void sdio_dld_close(struct tty_struct *tty, struct file *file)
 	if (sdio_dld->done_callback)
 		sdio_dld->done_callback();
 
-	pr_info(MODULE_NAME ": %s - Freeing sdio_dld data structure, and "
-		" returning...", __func__);
-	kfree(sdio_dld);
+	/*
+	 * tty_release() calls us with big_tty_mutex held. Unregistering here
+	 * would take tty_mutex in the opposite order to tty_open/release.
+	 * Prevent reopen while a worker unregisters this one-shot loader.
+	 */
+	set_bit(TTY_CLOSING, &tty->flags);
+	schedule_work(&dld->cleanup_work);
+	pr_info(MODULE_NAME ": %s - Bootloader done, returning...", __func__);
+}
+
+static void sdio_dld_tear_down(struct work_struct *work)
+{
+	struct sdio_downloader *dld = container_of(work,
+			struct sdio_downloader, cleanup_work);
+	int status;
+
+	tty_unregister_device(dld->tty_drv, 0);
+	status = tty_unregister_driver(dld->tty_drv);
+	if (status)
+		pr_err(MODULE_NAME ": %s - tty_unregister_driver() failed\n",
+		       __func__);
+
+	kfree(dld);
 }
 
 /**
@@ -2416,6 +2430,7 @@ int sdio_downloader_setup(struct mmc_card *card,
 		       "structure.", __func__);
 		return -ENOMEM;
 	}
+	INIT_WORK(&sdio_dld->cleanup_work, sdio_dld_tear_down);
 
 #ifdef CONFIG_DEBUG_FS
 	bootloader_debugfs_init();
