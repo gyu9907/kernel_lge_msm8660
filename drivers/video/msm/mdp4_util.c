@@ -404,7 +404,19 @@ void mdp4_hw_init(void)
 	 * This need further investigation.
 	 */
 
-	mdp4_sw_reset(0x17);
+	bits = 0x17;
+	/*
+	 * On MDP 4.1, resetting DMA_P after DSI video has been stopped can
+	 * leave its reset bit asserted indefinitely, even at 200 MHz. The
+	 * DSI clocks are not restored until panel_next_on(). Keep the other
+	 * resets, but reinitialize DMA_P through the normal video-on path.
+	 * Use the saved interface selection because the registers may have
+	 * been lost during power collapse.
+	 */
+	if (mdp_rev == MDP_REV_41 && (mdp4_display_intf & BIT(6)) &&
+	    (mdp4_display_intf & 0x03) == MDDI_LCDC_INTF)
+		bits &= ~BIT(1);
+	mdp4_sw_reset(bits);
 #endif
 
 	if (mdp_rev > MDP_REV_41) {
