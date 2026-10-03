@@ -80,6 +80,8 @@ struct cpufreq_governor cpufreq_gov_ondemand = {
 /* Sampling types */
 enum {DBS_NORMAL_SAMPLE, DBS_SUB_SAMPLE};
 
+#define INPUT_BOOST_MS 150
+
 struct cpu_dbs_info_s {
 	cputime64_t prev_cpu_idle;
 	cputime64_t prev_cpu_iowait;
@@ -92,6 +94,8 @@ struct cpu_dbs_info_s {
 	unsigned int freq_lo_jiffies;
 	unsigned int freq_hi_jiffies;
 	unsigned int rate_mult;
+	unsigned long input_boost_until;
+	bool input_boost_active;
 	int cpu;
 	unsigned int sample_type:1;
 	/*
@@ -705,6 +709,16 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 
 	cpufreq_notify_utilization(policy, load_at_max_freq);
 
+	/* Keep the first scrolling frames out of the downscale path. */
+	if (this_dbs_info->input_boost_active) {
+		if (!dbs_tuners_ins.powersave_bias &&
+		    time_before(jiffies, this_dbs_info->input_boost_until)) {
+			dbs_freq_increase(policy, policy->max);
+			return;
+		}
+		this_dbs_info->input_boost_active = false;
+	}
+
 	/* Check for frequency increase */
 	if (max_load_freq > dbs_tuners_ins.up_threshold * policy->cur) {
 		/* If switching to max speed, apply sampling_down_factor */
@@ -849,14 +863,24 @@ static void dbs_refresh_callback(struct work_struct *unused)
 		goto bail_incorrect_governor;
 	}
 
-	if (policy->cur < policy->max) {
-		policy->cur = policy->max;
+	/* Serialize input boosts with sampling on the policy's timer CPU. */
+	this_dbs_info = &per_cpu(od_cpu_dbs_info, policy->cpu);
+	mutex_lock(&this_dbs_info->timer_mutex);
+	if (dbs_tuners_ins.powersave_bias)
+		goto out_timer;
 
+	this_dbs_info->input_boost_until =
+		jiffies + msecs_to_jiffies(INPUT_BOOST_MS);
+	this_dbs_info->input_boost_active = true;
+	this_dbs_info->rate_mult = 1;
+
+	if (policy->cur < policy->max) {
 		__cpufreq_driver_target(policy, policy->max,
 					CPUFREQ_RELATION_L);
-		this_dbs_info->prev_cpu_idle = get_cpu_idle_time(cpu,
-				&this_dbs_info->prev_cpu_wall);
 	}
+
+out_timer:
+	mutex_unlock(&this_dbs_info->timer_mutex);
 
 bail_incorrect_governor:
 	unlock_policy_rwsem_write(cpu);
@@ -871,10 +895,15 @@ static void dbs_input_event(struct input_handle *handle, unsigned int type,
 {
 	int i;
 
+	/* Boost once per touchscreen report, not for each coordinate. */
+	if (!strcmp(handle->dev->name, "synaptics_ts") &&
+	    (type != EV_SYN || code != SYN_REPORT))
+		return;
+
 #ifdef CONFIG_LGE_PM_CURRENT_CONSUMPTION_FIX
 	if(!strcmp((char*)(handle->dev->name), "accelerometer") || !strcmp((char*)(handle->dev->name), "proximity") ||
 	!strcmp((char*)(handle->dev->name), "magnetic_field") || !strcmp((char*)(handle->dev->name), "gyroscope")||
-	!strcmp((char*)(handle->dev->name), "light") || !strcmp((char*)(handle->dev->name), "synaptics_ts"))
+	!strcmp((char*)(handle->dev->name), "light"))
 	{
 		//printk(KERN_INFO "Not Bumping up CPU for %s", handle->dev->name);
 		return;
@@ -985,6 +1014,7 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 		}
 		this_dbs_info->cpu = cpu;
 		this_dbs_info->rate_mult = 1;
+		this_dbs_info->input_boost_active = false;
 		ondemand_powersave_bias_init_cpu(cpu);
 		/*
 		 * Start the timerschedule work, when this governor
@@ -1087,7 +1117,7 @@ static int __init cpufreq_gov_dbs_init(void)
 			MIN_SAMPLING_RATE_RATIO * jiffies_to_usecs(10);
 	}
 
-	input_wq = create_workqueue("iewq");
+	input_wq = alloc_workqueue("iewq", WQ_HIGHPRI | WQ_MEM_RECLAIM, 1);
 	if (!input_wq) {
 		printk(KERN_ERR "Failed to create iewq workqueue\n");
 		return -EFAULT;
