@@ -33,8 +33,6 @@
 #include "msm_fb.h"
 #include "mdp4.h"
 
-#define MDP4_ERROR
-
 struct mdp4_statistic mdp4_stat;
 
 struct mdp_csc_cfg_data csc_cfg_matrix[CSC_MAX_BLOCKS] = {
@@ -397,15 +395,11 @@ void mdp4_hw_init(void)
 
 	mdp_bus_scale_update_request(5);
 
-#ifdef MDP4_ERROR
 	/*
-	 * Issue software reset on DMA_P will casue DMA_P dma engine stall
-	 * on LCDC mode. However DMA_P does not stall at MDDI mode.
-	 * This need further investigation.
+	 * Restore registers without resetting dormant display blocks. On
+	 * MDP 4.1, even a reset with DMA_P excluded can stall completion of
+	 * the register write during DSI video resume.
 	 */
-
-	mdp4_sw_reset(0x17);
-#endif
 
 	if (mdp_rev > MDP_REV_41) {
 		/* mdp chip select controller */
