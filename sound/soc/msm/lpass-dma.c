@@ -403,11 +403,15 @@ static int __devinit dai_probe(struct platform_device *pdev)
 		pr_debug("%s Error  rc=%d\n", __func__, rc);
 		goto error;
 	}
-	for (i = 0; i <= MAX_CHANNELS; i++) {
+	for (i = 0; i < ARRAY_SIZE(dai); i++) {
 		dai[i] = kzalloc(sizeof(struct dai_drv), GFP_KERNEL);
-		if (!dai[0]) {
-			pr_debug("Allocation failed for dma_channel = 0\n");
-			return -ENODEV;
+		if (!dai[i]) {
+			pr_err("Allocation failed for dma_channel = %d\n", i);
+			while (i--) {
+				kfree(dai[i]);
+				dai[i] = NULL;
+			}
+			return -ENOMEM;
 		}
 	}
 	dai_info.base = ioremap(src->start, (src->end - src->start) + 1);
