@@ -1140,6 +1140,15 @@ config USB_G_LGE_ANDROID
 	help
 		 Provides android gadget codes for LGE United Driver.
 
+config USB_ANDROID_CDC_ECM
+	boolean "Android Gadget support CDC ECM instead of RNDIS"
+	depends on USB_G_ANDROID
+	default y if USB_G_LGE_ANDROID
+	help
+	  Select the legacy CDC ECM networking function instead of RNDIS.
+	  Disable this for Android userspace that requests the rndis function.
+	  Other LG gadget features are independent of this selection.
+
 config USB_G_LGE_ANDROID_FACTORY
 	boolean "Android Gadget for LGE Factory Driver"
 	depends on USB_G_LGE_ANDROID
