@@ -701,7 +701,7 @@ static void hal_process_session_end_done(struct hal_device *device,
 	device->callback(SESSION_END_DONE, &cmd_done);
 }
 
-static void hal_process_msg_packet(struct hal_device *device,
+static noinline_for_stack void hal_process_msg_packet(struct hal_device *device,
 	struct vidc_hal_msg_pkt_hdr *msg_hdr)
 {
 	if (!device || !msg_hdr || msg_hdr->size <

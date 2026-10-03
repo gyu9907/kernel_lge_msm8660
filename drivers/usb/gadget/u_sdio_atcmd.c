@@ -81,8 +81,8 @@ enum {
     ATCMD_OP_MODE_ATCMD,
     ATCMD_OP_MODE_PCSYNC,
 };
-static char *ATCMD_OP_MODE_PCSYNC_str = "pc sync mode";
-static char *ATCMD_OP_MODE_ATCMD_str  = "at cmd  mode";
+static const char ATCMD_OP_MODE_PCSYNC_str[] = "pc sync mode";
+static const char ATCMD_OP_MODE_ATCMD_str[]  = "at cmd  mode";
 
 static struct {
     struct gsdio_port *port;
@@ -453,12 +453,14 @@ ssize_t atcmd_write(struct file *filp, const char *buf, size_t count, loff_t *f_
 {
     ssize_t size = 0;
 
-    if(!strncasecmp(buf, ATCMD_OP_MODE_ATCMD_str, sizeof(ATCMD_OP_MODE_ATCMD_str))) {
+    if (count >= sizeof(ATCMD_OP_MODE_ATCMD_str) - 1 &&
+        !strncasecmp(buf, ATCMD_OP_MODE_ATCMD_str, sizeof(ATCMD_OP_MODE_ATCMD_str) - 1)) {
         pr_info("%s : mode changed to %s", __func__, ATCMD_OP_MODE_ATCMD_str);
         atcmd_info.op_mode = ATCMD_OP_MODE_ATCMD;
         return 0;
     }
-    else if(!strncasecmp(buf, ATCMD_OP_MODE_PCSYNC_str, sizeof(ATCMD_OP_MODE_PCSYNC_str))) {
+    else if (count >= sizeof(ATCMD_OP_MODE_PCSYNC_str) - 1 &&
+             !strncasecmp(buf, ATCMD_OP_MODE_PCSYNC_str, sizeof(ATCMD_OP_MODE_PCSYNC_str) - 1)) {
         pr_info("%s : mode changed to %s", __func__, ATCMD_OP_MODE_PCSYNC_str);
         atcmd_info.op_mode = ATCMD_OP_MODE_PCSYNC;
         return 0;

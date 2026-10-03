@@ -244,7 +244,8 @@ static int k3g_read_gyro_values(struct i2c_client *client,
 	int err;
 	struct i2c_msg msg[2];
 	u8 reg_buf;
-	u8 gyro_data[sizeof(*data) * (total_read ? (total_read - 1) : 1)];
+	/* A single-sample read still needs room for all three axes. */
+	u8 gyro_data[sizeof(*data) * (total_read > 1 ? total_read - 1 : 1)];
 	struct k3g_platform_data *pdata;
 	s16 tmp_xyz[3];
 
@@ -300,7 +301,7 @@ static int k3g_read_gyro_values(struct i2c_client *client,
 static int k3g_report_gyro_values(struct k3g_data *k3g_data)
 {
 	int res;
-	struct k3g_t data;
+	struct k3g_t data = { 0 };
 
 	if(DEBUG_FUNC_TRACE & debug_mask)
 		printk(KERN_INFO "%s: line %d\n", __func__, __LINE__);
