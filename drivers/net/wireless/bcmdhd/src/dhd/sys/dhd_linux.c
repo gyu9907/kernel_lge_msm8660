@@ -3660,10 +3660,6 @@ static int dhd_preinit_proc(dhd_pub_t *dhd, int ifidx, char *name, char *value)
 		uint iovlen;
 		int ret;
 
-#ifdef CONFIG_MACH_LGE_325_BOARD_LGU
-		/* The board callback already read and validated the address file. */
-		return 0;
-#endif
 		bcm_ether_atoe(value, &ea);
 
 		ret = memcmp( &ea.octet, dhd->mac.octet, ETHER_ADDR_LEN);
@@ -3949,13 +3945,6 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	dhd->op_mode = 0;
 #ifdef GET_CUSTOM_MAC_ENABLE
 	ret = dhd_custom_get_mac_address(ea_addr.octet);
-#ifdef CONFIG_MACH_LGE_325_BOARD_LGU
-	/* A failed NV lookup must not start Wi-Fi with the firmware default. */
-	if (ret) {
-		DHD_ERROR(("%s: factory MAC unavailable (%d)\n", __FUNCTION__, ret));
-		return BCME_NOTUP;
-	}
-#endif
 	if (!ret) {
 		memset(buf, 0, sizeof(buf));
 		bcm_mkiovar("cur_etheraddr", (void *)&ea_addr, ETHER_ADDR_LEN, buf, sizeof(buf));

@@ -5,7 +5,6 @@ EXTRA_CFLAGS += -Iarch/arm/mach-msm/qdsp6v2
 EXTRA_CFLAGS += -Ilge/include
 
 obj-$(CONFIG_MACH_LGE_325_BOARD)	+= board_lge_325.o
-obj-$(CONFIG_MACH_LGE_325_BOARD_LGU) += batman_hwaddrs.o
 obj-$(CONFIG_MACH_LGE_325_BOARD)	+= platform_lge_325_bt.o
 obj-$(CONFIG_MACH_LGE_325_BOARD)	+= platform_lge_325_camera.o
 obj-$(CONFIG_MACH_LGE_325_BOARD)	+= platform_lge_325_input.o
