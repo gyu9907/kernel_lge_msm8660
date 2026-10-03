@@ -3660,6 +3660,10 @@ static int dhd_preinit_proc(dhd_pub_t *dhd, int ifidx, char *name, char *value)
 		uint iovlen;
 		int ret;
 
+#ifdef CONFIG_MACH_LGE_325_BOARD_LGU
+		/* File publication already validated and selected the address. */
+		return 0;
+#endif
 		bcm_ether_atoe(value, &ea);
 
 		ret = memcmp( &ea.octet, dhd->mac.octet, ETHER_ADDR_LEN);

@@ -12,6 +12,9 @@
  */
 
 #include <linux/kernel.h>
+#ifdef CONFIG_MACH_LGE_325_BOARD_LGU
+#include <batman_hwaddrs.h>
+#endif
 #include <linux/platform_device.h>
 #include <linux/gpio.h>
 #include <linux/irq.h>
@@ -7545,6 +7548,10 @@ static int bcm_wifi_get_mac_addr(unsigned char* buf)
     uint rand_mac;
     static unsigned char mymac[6] = {0,};
     const unsigned char nullmac[6] = {0,};
+#ifdef CONFIG_MACH_LGE_325_BOARD_LGU
+    if (!batman_wifi_get_mac_addr(buf))
+        return 0;
+#endif
     pr_debug("%s: %p\n", __func__, buf);
 
     printk("[%s] Entering...in Board-l1-mmc.c\n", __func__  );
