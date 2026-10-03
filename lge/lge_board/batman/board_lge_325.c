@@ -12,6 +12,9 @@
  */
 
 #include <linux/kernel.h>
+#ifdef CONFIG_MACH_LGE_325_BOARD_LGU
+#include <batman_hwaddrs.h>
+#endif
 #include <linux/platform_device.h>
 #include <linux/gpio.h>
 #include <linux/irq.h>
@@ -7542,6 +7545,9 @@ static int bcm_wifi_carddetect(int val)
 
 static int bcm_wifi_get_mac_addr(unsigned char* buf)
 {
+#ifdef CONFIG_MACH_LGE_325_BOARD_LGU
+    return batman_wifi_get_mac_addr(buf);
+#else
     uint rand_mac;
     static unsigned char mymac[6] = {0,};
     const unsigned char nullmac[6] = {0,};
@@ -7573,6 +7579,7 @@ static int bcm_wifi_get_mac_addr(unsigned char* buf)
     printk("[%s] Exiting. MyMac :  %x : %x : %x : %x : %x : %x \n",__func__ , buf[0], buf[1], buf[2], buf[3], buf[4], buf[5] );
 
     return 0;
+#endif
 }
 
 static struct wifi_platform_data bcm_wifi_control = {

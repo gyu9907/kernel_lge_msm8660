@@ -2930,6 +2930,11 @@ dhd_prot_init(dhd_pub_t *dhd)
 #endif /* defined(WL_CFG80211) */
 		ret = dhd_preinit_ioctls(dhd);
 
+#ifdef CONFIG_MACH_LGE_325_BOARD_LGU
+	/* Preserve factory-address failure instead of replacing it with WLFC's result. */
+	if (ret < 0)
+		goto done;
+#endif
 #ifdef PROP_TXSTATUS
 	ret = dhd_wlfc_init(dhd);
 #endif
