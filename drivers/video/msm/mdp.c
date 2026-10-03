@@ -66,6 +66,7 @@ int mdp_iommu_split_domain;
 u32 mdp_max_clk = 266667000;
 
 static struct platform_device *mdp_init_pdev;
+static struct msm_panel_common_pdata *mdp_pdata;
 static struct regulator *footswitch;
 static unsigned int mdp_footswitch_on;
 
@@ -2577,6 +2578,13 @@ static int mdp_off(struct platform_device *pdev)
 	ret = panel_next_off(pdev);
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
+	/* Switch banks while clocks are still enabled, after scanout stops. */
+	if (mdp_pdata && mdp_pdata->mdp_init_clk) {
+		int clk_ret = mdp_set_core_clk(mdp_pdata->mdp_init_clk);
+		if (!ret)
+			ret = clk_ret;
+	}
+
 	mdp_clk_ctrl(0);
 
 	if (mdp_rev >= MDP_REV_41 && mfd->panel.type == MIPI_CMD_PANEL)
@@ -2595,6 +2603,12 @@ static int mdp_on(struct platform_device *pdev)
 	pr_debug("%s:+\n", __func__);
 
 	if (mdp_rev >= MDP_REV_40) {
+		/* The reset clock can be lower than the running overlay clock. */
+		if (mdp_pdata && mdp_pdata->mdp_init_clk) {
+			ret = mdp_set_core_clk(mdp_pdata->mdp_init_clk);
+			if (ret)
+				return ret;
+		}
 		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 		mdp_clk_ctrl(1);
 		mdp4_hw_init();
@@ -2641,7 +2655,6 @@ static int mdp_on(struct platform_device *pdev)
 }
 
 static int mdp_resource_initialized;
-static struct msm_panel_common_pdata *mdp_pdata;
 
 uint32 mdp_hw_revision;
 
@@ -2790,6 +2803,8 @@ static int mdp_irq_clk_setup(struct platform_device *pdev,
 
 	if (cont_splashScreen)
 		mdp_clk_rate = clk_get_rate(mdp_clk);
+	else if (mdp_pdata && mdp_pdata->mdp_init_clk)
+		mdp_clk_rate = mdp_pdata->mdp_init_clk;
 	else
 		mdp_clk_rate = mdp_max_clk;
 

@@ -1636,13 +1636,13 @@ unsigned char hdmi_is_primary;
 #define USER_SMI_SIZE				(MSM_SMI_SIZE - KERNEL_SMI_SIZE)
 #define MSM_PMEM_SMIPOOL_SIZE		USER_SMI_SIZE
 
-#define MSM_ION_SF_SIZE				0x4000000 /* 64MB */
+#define MSM_ION_SF_SIZE				0x5000000 /* 80MB: UI and rotator */
 #define MSM_ION_CAMERA_SIZE			MSM_PMEM_ADSP_SIZE
 #define MSM_ION_MM_FW_SIZE			0x200000 /* (2MB) */
 #define MSM_ION_MM_SIZE				0x3600000 /* (54MB) */
 #define MSM_ION_MFC_SIZE			SZ_8K
 
-#define MSM_ION_WB_SIZE				0x2000000 /* 32MB */
+#define MSM_ION_WB_SIZE				0x600000 /* 6MiB: 4.5MiB primary WB plus headroom */
 
 #define MSM_ION_QSECOM_SIZE			0x600000 /* (6MB) */
 //#define MSM_ION_AUDIO_SIZE			MSM_PMEM_AUDIO_SIZE
@@ -1689,7 +1689,7 @@ unsigned char hdmi_is_primary;
 #define SECURE_SIZE (MSM_ION_MM_SIZE + MSM_MM_FW_SIZE)
 #endif
 
-#define MSM_ION_SF_SIZE				0x4000000 /* 64MB */
+#define MSM_ION_SF_SIZE				0x5000000 /* 80MB: UI and rotator */
 #define MSM_ION_CAMERA_SIZE			MSM_PMEM_ADSP_SIZE
 
 #ifdef CONFIG_FB_MSM_OVERLAY1_WRITEBACK
@@ -1786,7 +1786,6 @@ static struct platform_device android_pmem_adsp_device = {
 	.id = 2,
 	.dev = { .platform_data = &android_pmem_adsp_pdata },
 };
-#endif /*CONFIG_MSM_MULTIMEDIA_USE_ION*/
 
 static struct android_pmem_platform_data android_pmem_audio_pdata = {
 	.name = "pmem_audio",
@@ -1800,6 +1799,7 @@ static struct platform_device android_pmem_audio_device = {
 	.id = 4,
 	.dev = { .platform_data = &android_pmem_audio_pdata },
 };
+#endif /*CONFIG_MSM_MULTIMEDIA_USE_ION*/
 
 #define PMEM_BUS_WIDTH(_bw) \
 { \
@@ -3597,8 +3597,8 @@ static struct platform_device *surf_devices[] __initdata = {
 	&android_pmem_device,
 	&android_pmem_adsp_device,
 	&android_pmem_smipool_device,
-#endif /*CONFIG_MSM_MULTIMEDIA_USE_ION*/
 	&android_pmem_audio_device,
+#endif /*CONFIG_MSM_MULTIMEDIA_USE_ION*/
 #endif /*CONFIG_ANDROID_PMEM*/
 #ifdef CONFIG_MSM_ROTATOR
 	&msm_rotator_device,
@@ -4029,8 +4029,8 @@ static void __init size_pmem_devices(void)
 	if (hdmi_is_primary)
 		pmem_sf_size = MSM_HDMI_PRIM_PMEM_SF_SIZE;
 	android_pmem_pdata.size = pmem_sf_size;
-#endif /*CONFIG_MSM_MULTIMEDIA_USE_ION*/
 	android_pmem_audio_pdata.size = MSM_PMEM_AUDIO_SIZE;
+#endif /*CONFIG_MSM_MULTIMEDIA_USE_ION*/
 #endif /*CONFIG_ANDROID_PMEM*/
 }
 
@@ -4061,13 +4061,12 @@ static void __init reserve_silent_reset_memory(void)
 #endif
 
 //                                                                       
-//#ifndef CONFIG_MSM_MULTIMEDIA_USE_ION
+#if defined(CONFIG_ANDROID_PMEM) && !defined(CONFIG_MSM_MULTIMEDIA_USE_ION)
 static void __init reserve_memory_for(struct android_pmem_platform_data *p)
 {
 	msm8x60_reserve_table[p->memory_type].size += p->size;
 }
-//#endif /*CONFIG_MSM_MULTIMEDIA_USE_ION*/
-//#endif /*CONFIG_ANDROID_PMEM*/
+#endif
 
 static void __init reserve_pmem_memory(void)
 {
@@ -4076,8 +4075,8 @@ static void __init reserve_pmem_memory(void)
 	reserve_memory_for(&android_pmem_adsp_pdata);
 	reserve_memory_for(&android_pmem_smipool_pdata);
 	reserve_memory_for(&android_pmem_pdata);
-#endif /*CONFIG_MSM_MULTIMEDIA_USE_ION*/
 	reserve_memory_for(&android_pmem_audio_pdata);
+#endif /*CONFIG_MSM_MULTIMEDIA_USE_ION*/
 	msm8x60_reserve_table[MEMTYPE_EBI1].size += pmem_kernel_ebi1_size;
 #endif /*CONFIG_ANDROID_PMEM*/
 }
