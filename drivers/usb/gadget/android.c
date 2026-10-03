@@ -70,7 +70,7 @@
 #include "f_ccid.c"
 #include "f_mtp.c"
 #include "f_accessory.c"
-#ifdef CONFIG_USB_G_LGE_ANDROID	/*                                        */
+#ifdef CONFIG_USB_ANDROID_CDC_ECM
 #include "f_ecm.c"
 #else
 #define USB_ETH_RNDIS y
@@ -927,7 +927,7 @@ static struct android_usb_function ptp_function = {
 };
 
 
-#ifndef CONFIG_USB_G_LGE_ANDROID	/*                                        */
+#ifndef CONFIG_USB_ANDROID_CDC_ECM
 struct rndis_function_config {
 	u8      ethaddr[ETH_ALEN];
 	u32     vendorID;
@@ -986,8 +986,11 @@ rndis_function_bind_config(struct android_usb_function *f,
 		rndis_control_intf.bInterfaceProtocol =	 0x03;
 	}
 
-	return rndis_bind_config_vendor(c, rndis->ethaddr, rndis->vendorID,
-					   rndis->manufacturer);
+	ret = rndis_bind_config_vendor(c, rndis->ethaddr, rndis->vendorID,
+				      rndis->manufacturer);
+	if (ret)
+		gether_cleanup();
+	return ret;
 }
 
 static void rndis_function_unbind_config(struct android_usb_function *f,
@@ -1064,13 +1067,17 @@ static ssize_t rndis_ethaddr_store(struct device *dev,
 {
 	struct android_usb_function *f = dev_get_drvdata(dev);
 	struct rndis_function_config *rndis = f->config;
+	unsigned int addr[ETH_ALEN];
+	int i;
 
 	if (sscanf(buf, "%02x:%02x:%02x:%02x:%02x:%02x\n",
-		    (int *)&rndis->ethaddr[0], (int *)&rndis->ethaddr[1],
-		    (int *)&rndis->ethaddr[2], (int *)&rndis->ethaddr[3],
-		    (int *)&rndis->ethaddr[4], (int *)&rndis->ethaddr[5]) == 6)
-		return size;
-	return -EINVAL;
+		   &addr[0], &addr[1], &addr[2],
+		   &addr[3], &addr[4], &addr[5]) != ETH_ALEN)
+		return -EINVAL;
+
+	for (i = 0; i < ETH_ALEN; i++)
+		rndis->ethaddr[i] = addr[i];
+	return size;
 }
 
 static DEVICE_ATTR(ethaddr, S_IRUGO | S_IWUSR, rndis_ethaddr_show,
@@ -1120,7 +1127,7 @@ static struct android_usb_function rndis_function = {
 };
 #endif	/*                                        */
 
-#ifdef CONFIG_USB_G_LGE_ANDROID	/*                                        */
+#ifdef CONFIG_USB_ANDROID_CDC_ECM
 struct ecm_function_config {
 	u8      ethaddr[ETH_ALEN];
 	u32     vendorID;
@@ -1696,7 +1703,7 @@ static struct android_usb_function *supported_functions[] = {
 	&acm_function,
 	&mtp_function,
 	&ptp_function,
-#ifdef CONFIG_USB_G_LGE_ANDROID	/*                                        */
+#ifdef CONFIG_USB_ANDROID_CDC_ECM
 	&ecm_function,
 #else
 	&rndis_function,
@@ -2284,7 +2291,7 @@ static int android_bind(struct usb_composite_dev *cdev)
 	strings_dev[STRING_SERIAL_IDX].id = id;
 	device_desc.iSerialNumber = id;
 
-#ifdef CONFIG_USB_G_LGE_ANDROID	/*                                        */
+#if defined(CONFIG_USB_G_LGE_ANDROID) && defined(CONFIG_USB_ANDROID_CDC_ECM)
 	/* ecm - 4:control interface label */
 	id = usb_string_id(cdev);
 	if (id < 0)
