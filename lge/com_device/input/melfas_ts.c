@@ -26,6 +26,8 @@
 #include <linux/platform_device.h>
 #include <linux/version.h>
 #include "melfas_ts.h"
+#include <linux/fb.h>
+#include <linux/notifier.h>
 
 
 #define MIP_ENABLE 	1
@@ -88,15 +90,13 @@ struct melfas_ts_data
 	uint32_t flags;
 	int (*power)(int on);
 	int (*power_enable)(int en, bool log_en);
-	struct early_suspend early_suspend;
+	struct notifier_block fb_notif;
+	bool fb_suspended;
 	char fw_rev;
 	char manufcturer_id;
 };
 
-#if defined(CONFIG_HAS_EARLYSUSPEND)
-static void melfas_ts_early_suspend(struct early_suspend *h);
-static void melfas_ts_late_resume(struct early_suspend *h);
-#endif
+static int melfas_fb_notifier(struct notifier_block *nb, unsigned long event, void *data);
 
 static struct muti_touch_info g_Mtouch_info[MELFAS_MAX_TOUCH];
 
@@ -619,12 +619,16 @@ static int melfas_ts_probe(struct i2c_client *client, const struct i2c_device_id
 	printk(KERN_ERR "melfas_ts_probe: succeed to register input device\n");
 #endif
 
-#if defined(CONFIG_HAS_EARLYSUSPEND)
-	ts->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
-	ts->early_suspend.suspend = melfas_ts_early_suspend;
-	ts->early_suspend.resume = melfas_ts_late_resume;
-	register_early_suspend(&ts->early_suspend);
-#endif
+	ts->fb_notif.notifier_call = melfas_fb_notifier;
+	ret = fb_register_client(&ts->fb_notif);
+	if (ret) {
+		if (client->irq)
+			free_irq(client->irq, ts);
+		input_unregister_device(ts->input_dev);
+		ts->pdata->power_enable(0, true);
+		kfree(ts);
+		return ret;
+	}
 
 #if DEBUG_PRINT
 	printk(KERN_INFO "melfas_ts_probe: Start touchscreen. name: %s, irq: %d\n", ts->client->name, ts->client->irq);
@@ -654,7 +658,7 @@ static int melfas_ts_remove(struct i2c_client *client)
 {
 	struct melfas_ts_data *ts = i2c_get_clientdata(client);
 
-	unregister_early_suspend(&ts->early_suspend);
+	fb_unregister_client(&ts->fb_notif);
 	free_irq(client->irq, ts);
 	input_unregister_device(ts->input_dev);
 	kfree(ts);
@@ -744,21 +748,25 @@ static void melfas_ts_resume_func(struct melfas_ts_data *ts)
 
 }
 
-#if defined(CONFIG_HAS_EARLYSUSPEND)
-static void melfas_ts_early_suspend(struct early_suspend *h)
+/* Display notifications replace the removed early-suspend callbacks. */
+static int melfas_fb_notifier(struct notifier_block *nb, unsigned long event, void *data)
 {
-	struct melfas_ts_data *ts;
-	ts = container_of(h, struct melfas_ts_data, early_suspend);
-	melfas_ts_suspend_func(ts);
-}
+	struct melfas_ts_data *ts = container_of(nb, struct melfas_ts_data, fb_notif);
+	struct fb_event *ev = data;
+	int blank;
 
-static void melfas_ts_late_resume(struct early_suspend *h)
-{
-	struct melfas_ts_data *ts;
-	ts = container_of(h, struct melfas_ts_data, early_suspend);
-	melfas_ts_resume_func(ts);
+	if (event != FB_EVENT_BLANK || !ev || !ev->info || !ev->data || ev->info->node != 0)
+		return NOTIFY_DONE;
+	blank = *(int *)ev->data;
+	if (blank == FB_BLANK_POWERDOWN && !ts->fb_suspended) {
+		melfas_ts_suspend_func(ts);
+		ts->fb_suspended = true;
+	} else if (blank == FB_BLANK_UNBLANK && ts->fb_suspended) {
+		melfas_ts_resume_func(ts);
+		ts->fb_suspended = false;
+	}
+	return NOTIFY_OK;
 }
-#endif
 
 static const struct i2c_device_id melfas_ts_id[] = {
 	{ MELFAS_TS_NAME, 0 },

@@ -254,6 +254,7 @@ struct k3dh_acc_data {
   int hw_initialized;
   int hw_working;
   atomic_t enabled;
+  bool resume_enabled;
   int poll_ms;
 
   u8 sensitivity;
@@ -1884,13 +1885,14 @@ static int k3dh_acc_resume(struct i2c_client *client)
 {
   struct k3dh_acc_data *acc = i2c_get_clientdata(client);
   DEV_INFO(DEBUG_FUNC_TRACE, "%s(%d)\n", __func__, __LINE__);
-  return k3dh_acc_enable(acc);
+  return acc->resume_enabled ? k3dh_acc_enable(acc) : 0;
 }
 
 static int k3dh_acc_suspend(struct i2c_client *client, pm_message_t mesg)
 {
   struct k3dh_acc_data *acc = i2c_get_clientdata(client);
   DEV_INFO(DEBUG_FUNC_TRACE, "%s(%d)\n", __func__, __LINE__);
+  acc->resume_enabled = atomic_read(&acc->enabled);
   return k3dh_acc_disable(acc);
 }
 #endif

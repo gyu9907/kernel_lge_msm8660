@@ -24,7 +24,8 @@
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
-#include <linux/earlysuspend.h>
+#include <linux/fb.h>
+#include <linux/notifier.h>
 #include <linux/jiffies.h>
 #include <linux/sysdev.h>
 #include <linux/types.h>
@@ -57,7 +58,8 @@ struct lge_touch_data
 	struct delayed_work			work_init;
 	struct delayed_work			work_touch_lock;
 	struct work_struct  		work_fw_upgrade;
-	struct early_suspend		early_suspend;
+	struct notifier_block fb_notif;
+	bool fb_suspended;
 	struct touch_platform_data 	*pdata;
 	struct touch_data			ts_data;
 	struct touch_fw_info		fw_info;
@@ -121,10 +123,9 @@ int ghost_detection_count = 0;
 #define MAX_RETRY_COUNT			3
 #define MAX_GHOST_CHECK_COUNT	3
 
-#if defined(CONFIG_HAS_EARLYSUSPEND)
-static void touch_early_suspend(struct early_suspend *h);
-static void touch_late_resume(struct early_suspend *h);
-#endif
+static void touch_fb_suspend(struct lge_touch_data *ts);
+static void touch_fb_resume(struct lge_touch_data *ts);
+static int touch_fb_notifier(struct notifier_block *nb, unsigned long event, void *data);
 
 /* Auto Test interface for some model */
 struct lge_touch_data *touch_test_dev = NULL;
@@ -3251,12 +3252,12 @@ static int touch_probe(struct i2c_client *client, const struct i2c_device_id *id
 		ts->accuracy_filter.touch_max_count = one_sec / 2;
 	}
 
-#if defined(CONFIG_HAS_EARLYSUSPEND)
-	ts->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
-	ts->early_suspend.suspend = touch_early_suspend;
-	ts->early_suspend.resume = touch_late_resume;
-	register_early_suspend(&ts->early_suspend);
-#endif
+	ts->fb_notif.notifier_call = touch_fb_notifier;
+	ret = fb_register_client(&ts->fb_notif);
+	if (ret) {
+		TOUCH_ERR_MSG("Cannot register framebuffer notifier: %d\n", ret);
+		goto err_interrupt_failed;
+	}
 
 	/* Register sysfs for making fixed communication path to framework layer */
 	ret = sysdev_class_register(&lge_touch_sys_class);
@@ -3290,7 +3291,7 @@ err_lge_touch_sys_dev_register:
 	sysdev_unregister(&lge_touch_sys_device);
 err_lge_touch_sys_class_register:
 	sysdev_class_unregister(&lge_touch_sys_class);
-	unregister_early_suspend(&ts->early_suspend);
+	fb_unregister_client(&ts->fb_notif);
 err_interrupt_failed:
 err_input_register_device_failed:
 	if (ts->pdata->role->operation_mode)
@@ -3332,7 +3333,7 @@ static int touch_remove(struct i2c_client *client)
 	sysdev_unregister(&lge_touch_sys_device);
 	sysdev_class_unregister(&lge_touch_sys_class);
 
-	unregister_early_suspend(&ts->early_suspend);
+	fb_unregister_client(&ts->fb_notif);
 
 	if (ts->pdata->role->operation_mode)
 		free_irq(client->irq, ts);
@@ -3348,17 +3349,14 @@ static int touch_remove(struct i2c_client *client)
 	return 0;
 }
 
-#if defined(CONFIG_HAS_EARLYSUSPEND)
-static void touch_early_suspend(struct early_suspend *h)
+static void touch_fb_suspend(struct lge_touch_data *ts)
 {
-	struct lge_touch_data *ts =
-			container_of(h, struct lge_touch_data, early_suspend);
 
 	if (unlikely(touch_debug_mask & DEBUG_TRACE))
 		TOUCH_DEBUG_MSG("\n");
 
 	if (ts->fw_info.fw_upgrade.is_downloading == UNDER_DOWNLOADING){
-		TOUCH_INFO_MSG("early_suspend is not executed\n");
+		TOUCH_INFO_MSG("suspend skipped during firmware update\n");
 		return;
 	}
 
@@ -3384,16 +3382,14 @@ static void touch_early_suspend(struct early_suspend *h)
 	touch_power_cntl(ts, ts->pdata->role->suspend_pwr);
 }
 
-static void touch_late_resume(struct early_suspend *h)
+static void touch_fb_resume(struct lge_touch_data *ts)
 {
-	struct lge_touch_data *ts =
-			container_of(h, struct lge_touch_data, early_suspend);
 
 	if (unlikely(touch_debug_mask & DEBUG_TRACE))
 		TOUCH_DEBUG_MSG("\n");
 
 	if (ts->fw_info.fw_upgrade.is_downloading == UNDER_DOWNLOADING){
-		TOUCH_INFO_MSG("late_resume is not executed\n");
+		TOUCH_INFO_MSG("resume skipped during firmware update\n");
 		return;
 	}
 
@@ -3414,30 +3410,35 @@ static void touch_late_resume(struct early_suspend *h)
 	else
 		queue_delayed_work(touch_wq, &ts->work_init, 0);
 }
-#endif
 
-#if defined(CONFIG_PM)
-static int touch_suspend(struct device *device)
+/* Follow mako eeba5f5945e: input follows display blanking, not early suspend. */
+static int touch_fb_notifier(struct notifier_block *nb, unsigned long event, void *data)
 {
-	return 0;
-}
+	struct lge_touch_data *ts = container_of(nb, struct lge_touch_data, fb_notif);
+	struct fb_event *ev = data;
+	int blank;
 
-static int touch_resume(struct device *device)
-{
-	return 0;
+	if (event != FB_EVENT_BLANK || !ev || !ev->info || !ev->data || ev->info->node != 0)
+		return NOTIFY_DONE;
+	if (ts->fw_info.fw_upgrade.is_downloading == UNDER_DOWNLOADING)
+		return NOTIFY_DONE;
+
+	blank = *(int *)ev->data;
+	if (blank == FB_BLANK_POWERDOWN && !ts->fb_suspended) {
+		touch_fb_suspend(ts);
+		ts->fb_suspended = true;
+	} else if (blank == FB_BLANK_UNBLANK && ts->fb_suspended) {
+		touch_fb_resume(ts);
+		ts->fb_suspended = false;
+	}
+	return NOTIFY_OK;
 }
-#endif
 
 static struct i2c_device_id lge_ts_id[] = {
 	{LGE_TOUCH_NAME, 0 },
 };
 
-#if defined(CONFIG_PM)
-static struct dev_pm_ops touch_pm_ops = {
-	.suspend 	= touch_suspend,
-	.resume 	= touch_resume,
-};
-#endif
+
 
 static struct i2c_driver lge_touch_driver = {
 	.probe   = touch_probe,
@@ -3446,9 +3447,6 @@ static struct i2c_driver lge_touch_driver = {
 	.driver	 = {
 		.name   = LGE_TOUCH_NAME,
 		.owner	= THIS_MODULE,
-#if defined(CONFIG_PM)
-		.pm		= &touch_pm_ops,
-#endif
 	},
 };
 

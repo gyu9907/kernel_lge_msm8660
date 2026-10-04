@@ -86,8 +86,10 @@ struct early_suspend ami306_sensor_early_suspend;
 
 static void ami306_early_suspend(struct early_suspend *h);
 static void ami306_late_resume(struct early_suspend *h);
-static atomic_t ami306_report_enabled = ATOMIC_INIT(0);
 #endif
+
+/* Used by the HAL ioctls independently of display power management. */
+static atomic_t ami306_report_enabled = ATOMIC_INIT(0);
 
 #if defined(CONFIG_PM)
 static int ami306_suspend(struct device *device);

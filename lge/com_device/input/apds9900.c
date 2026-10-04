@@ -2372,8 +2372,9 @@ static int __devexit apds9900_remove(struct i2c_client *client)
     return 0;
 }
 
+static unsigned int apds9900_enable_backup;
+
 #ifdef CONFIG_HAS_EARLYSUSPEND
-unsigned int apds9900_enable_backup = 0;
 
 static void apds9900_early_suspend(struct early_suspend * h)
 {
