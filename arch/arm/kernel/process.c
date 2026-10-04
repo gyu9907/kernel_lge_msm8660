@@ -367,7 +367,7 @@ static void show_data(unsigned long addr, int nbytes, const char *name)
 	 * don't attempt to dump non-kernel addresses or
 	 * values that are probably just small negative numbers
 	 */
-	if (addr < PAGE_OFFSET || addr > -256UL)
+	if (!virt_addr_valid(addr))
 		return;
 
 	printk("\n%s: %#lx:\n", name, addr);
@@ -389,7 +389,8 @@ static void show_data(unsigned long addr, int nbytes, const char *name)
 		printk("%04lx ", (unsigned long)p & 0xffff);
 		for (j = 0; j < 8; j++) {
 			u32	data;
-			if (probe_kernel_address(p, data)) {
+			/* Register values can point at MMIO with read side effects. */
+			if (!virt_addr_valid(p) || probe_kernel_address(p, data)) {
 				printk(" ********");
 			} else {
 				printk(" %08x", data);
