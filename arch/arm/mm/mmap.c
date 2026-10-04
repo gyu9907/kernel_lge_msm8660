@@ -68,13 +68,9 @@ arch_get_unmapped_area(struct file *filp, unsigned long addr,
 	if (len > mm->cached_hole_size) {
 	        start_addr = addr = mm->free_area_cache;
 	} else {
-		start_addr = addr = TASK_UNMAPPED_BASE;
+		start_addr = addr = mm->mmap_base;
 	        mm->cached_hole_size = 0;
 	}
-	/* 8 bits of randomness in 20 address space bits */
-	if ((current->flags & PF_RANDOMIZE) &&
-	    !(current->personality & ADDR_NO_RANDOMIZE))
-		addr += (get_random_int() % (1 << 8)) << PAGE_SHIFT;
 
 full_search:
 	if (do_align)
@@ -89,8 +85,8 @@ full_search:
 			 * Start a new search - just in case we missed
 			 * some holes.
 			 */
-			if (start_addr != TASK_UNMAPPED_BASE) {
-				start_addr = addr = TASK_UNMAPPED_BASE;
+			if (start_addr != mm->mmap_base) {
+				start_addr = addr = mm->mmap_base;
 				mm->cached_hole_size = 0;
 				goto full_search;
 			}
@@ -111,6 +107,24 @@ full_search:
 	}
 }
 
+void arch_pick_mmap_layout(struct mm_struct *mm)
+{
+	unsigned long random_factor = 0;
+
+	if ((current->flags & PF_RANDOMIZE) &&
+	    !(current->personality & ADDR_NO_RANDOMIZE))
+		random_factor = ((unsigned long)get_random_int() &
+				 ((1UL << mmap_rnd_bits) - 1)) << PAGE_SHIFT;
+
+	/*
+	 * Keep bottom-up allocation for the legacy Qualcomm userspace.
+	 * Randomize the base once per layout, not on every mmap search.
+	 * ARM32 get_random_int() supplies all bits needed by this mask.
+	 */
+	mm->mmap_base = TASK_UNMAPPED_BASE + random_factor;
+	mm->get_unmapped_area = arch_get_unmapped_area;
+	mm->unmap_area = arch_unmap_area;
+}
 
 /*
  * You really shouldn't be using read() or write() on /dev/mem.  This
