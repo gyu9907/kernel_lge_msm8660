@@ -477,6 +477,11 @@ static int __devinit pm8xxx_rtc_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, rtc_dd);
 
+	/* Alarmtimer selects wake-capable RTCs during device registration. */
+	rc = device_init_wakeup(&pdev->dev, 1);
+	if (rc)
+		goto fail_rtc_enable;
+
 	/* Register the RTC device */
 	rtc_dd->rtc = rtc_device_register("pm8xxx_rtc", &pdev->dev,
 				&pm8xxx_rtc_ops, THIS_MODULE);
@@ -484,7 +489,7 @@ static int __devinit pm8xxx_rtc_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "%s: RTC registration failed (%ld)\n",
 					__func__, PTR_ERR(rtc_dd->rtc));
 		rc = PTR_ERR(rtc_dd->rtc);
-		goto fail_rtc_enable;
+		goto fail_rtc_register;
 	}
 
 	/* Request the alarm IRQ */
@@ -496,14 +501,14 @@ static int __devinit pm8xxx_rtc_probe(struct platform_device *pdev)
 		goto fail_req_irq;
 	}
 
-	device_init_wakeup(&pdev->dev, 1);
-
 	dev_dbg(&pdev->dev, "Probe success !!\n");
 
 	return 0;
 
 fail_req_irq:
 	rtc_device_unregister(rtc_dd->rtc);
+fail_rtc_register:
+	device_init_wakeup(&pdev->dev, 0);
 fail_rtc_enable:
 	platform_set_drvdata(pdev, NULL);
 	kfree(rtc_dd);

@@ -176,6 +176,8 @@ static int timerfd_setup(struct timerfd_ctx *ctx, int flags,
 			   ctx->clockid == CLOCK_REALTIME_ALARM ?
 			   ALARM_REALTIME : ALARM_BOOTTIME,
 			   timerfd_alarmproc);
+		/* Also clear the saved expiry when disarming the timer. */
+		ctx->t.alarm.node.expires = texp;
 	} else {
 		hrtimer_init(&ctx->t.tmr, clockid, htmode);
 		hrtimer_set_expires(&ctx->t.tmr, texp);
