@@ -185,14 +185,14 @@ void fib_rules_unregister(struct fib_rules_ops *ops)
 }
 EXPORT_SYMBOL_GPL(fib_rules_unregister);
 
-static inline uid_t fib_nl_uid(struct nlattr *nla)
+static int nla_put_uid_range(struct sk_buff *skb, struct fib_rule *rule)
 {
-	return nla_get_u32(nla);
-}
+	struct fib_rule_uid_range range = {
+		.start = rule->uid_start,
+		.end = rule->uid_end,
+	};
 
-static int nla_put_uid(struct sk_buff *skb, int idx, uid_t uid)
-{
-	return nla_put_u32(skb, idx, uid);
+	return nla_put(skb, FRA_UID_RANGE, sizeof(range), &range);
 }
 
 static int fib_uid_range_match(struct flowi *fl, struct fib_rule *rule)
@@ -389,17 +389,17 @@ static int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 	} else if (rule->action == FR_ACT_GOTO)
 		goto errout_free;
 
-	/* UID start and end must either both be valid or both unspecified. */
 	rule->uid_start = rule->uid_end = INVALID_UID;
-	if (tb[FRA_UID_START] || tb[FRA_UID_END]) {
-		if (tb[FRA_UID_START] && tb[FRA_UID_END]) {
-			rule->uid_start = fib_nl_uid(tb[FRA_UID_START]);
-			rule->uid_end = fib_nl_uid(tb[FRA_UID_END]);
-		}
+	if (tb[FRA_UID_RANGE]) {
+		const struct fib_rule_uid_range *range =
+			nla_data(tb[FRA_UID_RANGE]);
+
+		rule->uid_start = range->start;
+		rule->uid_end = range->end;
 		if (!uid_valid(rule->uid_start) ||
 		    !uid_valid(rule->uid_end) ||
 		    !uid_lte(rule->uid_start, rule->uid_end))
-		goto errout_free;
+			goto errout_free;
 	}
 
 	err = ops->configure(rule, skb, frh, tb);
@@ -507,13 +507,14 @@ static int fib_nl_delrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 		    (rule->mark_mask != nla_get_u32(tb[FRA_FWMASK])))
 			continue;
 
-		if (tb[FRA_UID_START] &&
-		    !uid_eq(rule->uid_start, fib_nl_uid(tb[FRA_UID_START])))
-			continue;
+		if (tb[FRA_UID_RANGE]) {
+			const struct fib_rule_uid_range *range =
+				nla_data(tb[FRA_UID_RANGE]);
 
-		if (tb[FRA_UID_END] &&
-		    !uid_eq(rule->uid_end, fib_nl_uid(tb[FRA_UID_END])))
-			continue;
+			if (!uid_eq(rule->uid_start, range->start) ||
+			    !uid_eq(rule->uid_end, range->end))
+				continue;
+		}
 
 		if (!ops->compare(rule, frh, tb))
 			continue;
@@ -570,8 +571,7 @@ static inline size_t fib_rule_nlmsg_size(struct fib_rules_ops *ops,
 			 + nla_total_size(4) /* FRA_TABLE */
 			 + nla_total_size(4) /* FRA_FWMARK */
 			 + nla_total_size(4) /* FRA_FWMASK */
-			 + nla_total_size(4) /* FRA_UID_START */
-			 + nla_total_size(4); /* FRA_UID_END */
+			 + nla_total_size(sizeof(struct fib_rule_uid_range));
 
 	if (ops->nlmsg_payload)
 		payload += ops->nlmsg_payload(rule);
@@ -629,11 +629,9 @@ static int fib_nl_fill_rule(struct sk_buff *skb, struct fib_rule *rule,
 	if (rule->target)
 		NLA_PUT_U32(skb, FRA_GOTO, rule->target);
 
-	if (uid_valid(rule->uid_start))
-	     nla_put_uid(skb, FRA_UID_START, rule->uid_start);
-
-	if (uid_valid(rule->uid_end))
-	     nla_put_uid(skb, FRA_UID_END, rule->uid_end);
+	if (uid_valid(rule->uid_start) &&
+	    nla_put_uid_range(skb, rule) < 0)
+		goto nla_put_failure;
 
 	if (ops->fill(rule, skb, frh) < 0)
 		goto nla_put_failure;
