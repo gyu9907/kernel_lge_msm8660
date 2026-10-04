@@ -6913,6 +6913,15 @@ static struct genl_multicast_group nl80211_regulatory_mcgrp = {
 	.name = "regulatory",
 };
 
+/*
+ * Modern Wi-Fi HALs subscribe to this group even on legacy drivers without
+ * vendor commands. Keep subscription working; unsupported commands still
+ * return an error and no vendor features are advertised.
+ */
+static struct genl_multicast_group nl80211_vendor_mcgrp = {
+	.name = "vendor",
+};
+
 /* notification functions */
 
 void nl80211_notify_dev_rename(struct cfg80211_registered_device *rdev)
@@ -8112,6 +8121,10 @@ int nl80211_init(void)
 		goto err_out;
 
 	err = genl_register_mc_group(&nl80211_fam, &nl80211_mlme_mcgrp);
+	if (err)
+		goto err_out;
+
+	err = genl_register_mc_group(&nl80211_fam, &nl80211_vendor_mcgrp);
 	if (err)
 		goto err_out;
 
