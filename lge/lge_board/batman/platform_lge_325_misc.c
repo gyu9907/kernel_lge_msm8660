@@ -16,6 +16,8 @@
 #ifdef CONFIG_LGE_ISA1200
 
 #include <linux/types.h>
+#include <linux/clk.h>
+#include <linux/mutex.h>
 #include <linux/list.h>
 #include <linux/err.h>
 #include <mach/msm_iomap.h>
@@ -129,6 +131,12 @@ static int vibrator_power_set(int enable)
 	return 0;
 }
 
+#if defined(CONFIG_MACH_LGE_325_BOARD_LGU) || defined(CONFIG_MACH_LGE_325_BOARD_VZW)
+static DEFINE_MUTEX(vibrator_clock_lock);
+static struct clk *vibrator_pdm_clk;
+static bool vibrator_pdm_enabled;
+#endif
+
 extern int vibe_level;
 static int lge_isa1200_clock(int enable, int amp)
 {
@@ -136,9 +144,35 @@ static int lge_isa1200_clock(int enable, int amp)
 	uint M_VAL = GP_MN_M_DEFAULT;
 	uint N_VAL = GP_MN_N_DEFAULT;
 	uint D_VAL = GP_MN_D_DEFAULT;
-	void __iomem *vib_base_ptr = 0;
+	void __iomem *vib_base_ptr;
+	int rc = 0;
 
-	vib_base_ptr = ioremap_nocache(MSM_PDM_BASE_REG,0x20 );
+	mutex_lock(&vibrator_clock_lock);
+	if (!vibrator_pdm_clk) {
+		vibrator_pdm_clk = clk_get_sys("lge_isa1200", "core_clk");
+		if (IS_ERR(vibrator_pdm_clk)) {
+			rc = PTR_ERR(vibrator_pdm_clk);
+			vibrator_pdm_clk = NULL;
+			goto unlock;
+		}
+	}
+	vib_base_ptr = ioremap_nocache(MSM_PDM_BASE_REG, 0x20);
+	if (!vib_base_ptr) {
+		rc = -ENOMEM;
+		goto unlock;
+	}
+	/* Even an initial off request writes PDM registers. Accessing them
+	 * while the PDM clock is gated stalls the bus and trips the watchdog.
+	 * Keep our clock vote while PWM is active and balance it after off.
+	 */
+	if (!vibrator_pdm_enabled) {
+		rc = clk_prepare_enable(vibrator_pdm_clk);
+		if (rc) {
+			iounmap(vib_base_ptr);
+			goto unlock;
+		}
+		vibrator_pdm_enabled = true;
+	}
 
 	writel((M_VAL & GPMN_M_MASK), vib_base_ptr + GP_MN_CLK_MDIV_REG );
 	writel((~( N_VAL - M_VAL )&GPMN_N_MASK), vib_base_ptr + GP_MN_CLK_NDIV_REG);
@@ -159,6 +193,13 @@ static int lge_isa1200_clock(int enable, int amp)
 		gpio_tlmm_config(GPIO_CFG(GPIO_LIN_MOTOR_PWM, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_4MA), GPIO_CFG_ENABLE);
 	}
 	iounmap(vib_base_ptr);
+	if (!enable) {
+		clk_disable_unprepare(vibrator_pdm_clk);
+		vibrator_pdm_enabled = false;
+	}
+unlock:
+	mutex_unlock(&vibrator_clock_lock);
+	return rc;
 #else
 	if (enable) {
 		if(lge_bd_rev == LGE_REV_B)
