@@ -52,7 +52,29 @@ struct modem_data {
 	unsigned long start_addr;
 	struct pil_device *pil;
 	struct clk *xo;
+	struct clk *pdm;
+	bool pdm_enabled;
 };
+
+static int modem_enable_pdm(struct modem_data *drv)
+{
+	int ret;
+
+	if (!drv->pdm || drv->pdm_enabled)
+		return 0;
+	ret = clk_prepare_enable(drv->pdm);
+	if (!ret)
+		drv->pdm_enabled = true;
+	return ret;
+}
+
+static void modem_disable_pdm(struct modem_data *drv)
+{
+	if (drv->pdm_enabled) {
+		clk_disable_unprepare(drv->pdm);
+		drv->pdm_enabled = false;
+	}
+}
 
 static int make_modem_proxy_votes(struct pil_desc *pil)
 {
@@ -85,7 +107,12 @@ static int modem_init_image(struct pil_desc *pil, const u8 *metadata,
 static int modem_reset(struct pil_desc *pil)
 {
 	u32 reg;
-	const struct modem_data *drv = dev_get_drvdata(pil->dev);
+	struct modem_data *drv = dev_get_drvdata(pil->dev);
+	int ret;
+
+	ret = modem_enable_pdm(drv);
+	if (ret)
+		return ret;
 
 	/* Put modem AHB0,1,2 clocks into reset */
 	writel_relaxed(BIT(0) | BIT(1), MAHB0_SFAB_PORT_RESET);
@@ -164,6 +191,7 @@ static int modem_reset(struct pil_desc *pil)
 static int modem_shutdown(struct pil_desc *pil)
 {
 	u32 reg;
+	struct modem_data *drv = dev_get_drvdata(pil->dev);
 
 	/* Put modem into reset */
 	writel_relaxed(0x1, MARM_RESET);
@@ -196,6 +224,7 @@ static int modem_shutdown(struct pil_desc *pil)
 
 	/* Clear modem's votes for PLLs */
 	writel_relaxed(0x0, PLL_ENA_MARM);
+	modem_disable_pdm(drv);
 
 	return 0;
 }
@@ -216,12 +245,25 @@ static int modem_init_image_trusted(struct pil_desc *pil, const u8 *metadata,
 
 static int modem_reset_trusted(struct pil_desc *pil)
 {
-	return pas_auth_and_reset(PAS_MODEM);
+	struct modem_data *drv = dev_get_drvdata(pil->dev);
+	int ret;
+
+	ret = modem_enable_pdm(drv);
+	if (ret)
+		return ret;
+	ret = pas_auth_and_reset(PAS_MODEM);
+	if (ret)
+		modem_disable_pdm(drv);
+	return ret;
 }
 
 static int modem_shutdown_trusted(struct pil_desc *pil)
 {
-	return pas_shutdown(PAS_MODEM);
+	int ret = pas_shutdown(PAS_MODEM);
+
+	if (!ret)
+		modem_disable_pdm(dev_get_drvdata(pil->dev));
+	return ret;
 }
 
 static struct pil_reset_ops pil_modem_ops_trusted = {
@@ -254,6 +296,16 @@ static int __devinit pil_modem_driver_probe(struct platform_device *pdev)
 	drv->xo = devm_clk_get(&pdev->dev, "xo");
 	if (IS_ERR(drv->xo))
 		return PTR_ERR(drv->xo);
+
+	/* Batman's modem needs PDM during RF startup, even after the boot
+	 * proxy vote has expired. Keep a modem-owned vote until shutdown so
+	 * an independent vibrator clock release cannot gate the shared block.
+	 */
+	if (IS_ENABLED(CONFIG_MACH_LGE_325_BOARD_LGU)) {
+		drv->pdm = devm_clk_get(&pdev->dev, "pdm");
+		if (IS_ERR(drv->pdm))
+			return PTR_ERR(drv->pdm);
+	}
 
 	desc = devm_kzalloc(&pdev->dev, sizeof(*desc), GFP_KERNEL);
 	if (!desc)

@@ -3488,6 +3488,9 @@ static struct clk_lookup msm_clocks_8x60[] = {
 	CLK_LOOKUP("xo",		cxo_a_clk.c,	""),
 	CLK_LOOKUP("xo",		pxo_a_clk.c,	""),
 	CLK_LOOKUP("xo",		pxo_clk.c,	"pil_modem"),
+#ifdef CONFIG_MACH_LGE_325_BOARD_LGU
+	CLK_LOOKUP("pdm",	pdm_clk.c,	"pil_modem"),
+#endif
 #if 1 /*                                                          */
 	CLK_LOOKUP("vref_buff",     cxo_clk.c,  "rpm-regulator"),
 #endif
@@ -3824,6 +3827,9 @@ static struct clk_lookup msm_clocks_8x60[] = {
 	CLK_LOOKUP("xo",		cxo_a_clk.c,	""),
 	CLK_LOOKUP("xo",		pxo_a_clk.c,	""),
 	CLK_LOOKUP("xo",		pxo_clk.c,	"pil_modem"),
+#ifdef CONFIG_MACH_LGE_325_BOARD_LGU
+	CLK_LOOKUP("pdm",	pdm_clk.c,	"pil_modem"),
+#endif
 #if 1 /*                                                          */
 	CLK_LOOKUP("vref_buff",     cxo_clk.c,  "rpm-regulator"),
 #endif
