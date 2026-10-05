@@ -1278,10 +1278,8 @@ config MSM_SMD_DEBUG
 	  Support for debugging the SMD for communication
 	  between the ARM9 and ARM11
 
-#modified by mo2chunghan.lee@lge.com, 09/21/2012
 config MSM_SDIO_AL
-#	depends on ((ARCH_MSM7X30 || MACH_MSM8X60_FUSN_FFA || MACH_TYPE_MSM8X60_FUSION) && HAS_WAKELOCK)
-	depends on ((MACH_LGE_I_BOARD || MACH_LGE_325_BOARD || MACH_MSM8X60_FUSN_FFA || MACH_TYPE_MSM8X60_FUSION) && HAS_WAKELOCK)
+	depends on MACH_LGE_I_BOARD || MACH_LGE_325_BOARD || MACH_MSM8X60_FUSN_FFA || MACH_TYPE_MSM8X60_FUSION
 	default y
 	tristate "SDIO-Abstraction-Layer"
 	help
