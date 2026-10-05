@@ -1028,12 +1028,31 @@ static int apds9900_set_enable(struct i2c_client *client, int enable)
                 else
                     break;
             }
-#if defined(CONFIG_MACH_LGE_120_BOARD) 
-			if(((data->enable &0x20)==0)&&((enable &0x20)==0x20))
-#else
-			if(((data->enable &0x20)==0)&&((enable &0x20)==1))
-#endif
+            if (!(data->enable & 0x10) && (enable & 0x10)) {
+                unsigned long flags;
+
+                /* Re-arm ALS for an initial sample even under steady light. */
+                spin_lock_irqsave(&data->input_dev_light->event_lock, flags);
+                input_abs_set_val(data->input_dev_light, ABS_LIGHT, -1);
+                spin_unlock_irqrestore(&data->input_dev_light->event_lock, flags);
+                ret = apds9900_set_ailt(client, 65535);
+                if (ret < 0)
+                    return ret;
+                ret = apds9900_set_aiht(client, 0);
+                if (ret < 0)
+                    return ret;
+            }
+			if (!(data->enable & 0x20) && (enable & 0x20))
 			{
+                unsigned long flags;
+
+                /* Deliver the first measurement on every activation, even
+                 * when it matches the last distance before deactivation.
+                 * Only invalidate the input cache; never emit a fake value.
+                 */
+                spin_lock_irqsave(&data->input_dev_proxi->event_lock, flags);
+                input_abs_set_val(data->input_dev_proxi, ABS_DISTANCE, -1);
+                spin_unlock_irqrestore(&data->input_dev_proxi->event_lock, flags);
                 apds9900_set_pilt(client, 1023);	// to force first Near-to-Far interrupt
                 apds9900_set_piht(client, 0);
                 papds9900_data->ps_detection = 1;			// we are forcing Near-to-Far interrupt, so this is defaulted to 1
