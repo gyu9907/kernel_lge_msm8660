@@ -271,8 +271,8 @@ static void print_mem_entry(struct seq_file *s, struct kgsl_mem_entry *entry)
 
 	kgsl_get_memory_usage(usage, sizeof(usage), m->flags);
 
-	seq_printf(s, "%08x %8d %5d %5s %10s %16s %5d\n",
-			m->gpuaddr, m->size, entry->id, flags,
+	seq_printf(s, "%08x %08lx %8d %5d %5s %10s %16s %5d\n",
+			m->gpuaddr, m->useraddr, m->size, entry->id, flags,
 			memtype_str(entry->memtype), usage, m->sglen);
 }
 
@@ -283,8 +283,9 @@ static int process_mem_print(struct seq_file *s, void *unused)
 	struct kgsl_process_private *private = s->private;
 	int next = 0;
 
-	seq_printf(s, "%8s %8s %5s %5s %10s %16s %5s\n",
-		   "gpuaddr", "size", "id", "flags", "type", "usage", "sglen");
+	seq_printf(s, "%8s %8s %8s %5s %5s %10s %16s %5s\n",
+		   "gpuaddr", "useraddr", "size", "id", "flags", "type",
+		   "usage", "sglen");
 
 	/* print all entries with a GPU address */
 	spin_lock(&private->mem_lock);
