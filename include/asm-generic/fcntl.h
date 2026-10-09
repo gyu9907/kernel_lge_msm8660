@@ -84,6 +84,20 @@
 #define O_PATH		010000000
 #endif
 
+/*
+ * New libc FORTIFY headers test the userspace O_TMPFILE flag even when the
+ * target kernel does not implement it. Export its standard ABI value without
+ * enabling O_TMPFILE support or changing the kernel's valid open flags.
+ */
+#ifndef __KERNEL__
+#ifndef __O_TMPFILE
+#define __O_TMPFILE	020000000
+#endif
+#ifndef O_TMPFILE
+#define O_TMPFILE	(__O_TMPFILE | O_DIRECTORY)
+#endif
+#endif
+
 #ifndef O_NDELAY
 #define O_NDELAY	O_NONBLOCK
 #endif
