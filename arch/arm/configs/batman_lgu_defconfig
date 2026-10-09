@@ -3409,7 +3409,7 @@ CONFIG_TMPFS=y
 # CONFIG_TMPFS_POSIX_ACL is not set
 # CONFIG_TMPFS_XATTR is not set
 # CONFIG_HUGETLB_PAGE is not set
-# CONFIG_CONFIGFS_FS is not set
+CONFIG_CONFIGFS_FS=y
 CONFIG_MISC_FILESYSTEMS=y
 # CONFIG_ADFS_FS is not set
 # CONFIG_AFFS_FS is not set
@@ -3782,3 +3782,6 @@ CONFIG_DQL=y
 CONFIG_NLATTR=y
 # CONFIG_AVERAGE is not set
 # CONFIG_CORDIC is not set
+
+# Android Pie shared storage requires the in-kernel sdcardfs filesystem.
+CONFIG_SDCARD_FS=y
