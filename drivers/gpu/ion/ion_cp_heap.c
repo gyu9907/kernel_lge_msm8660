@@ -475,8 +475,9 @@ void *ion_cp_heap_map_kernel(struct ion_heap *heap, struct ion_buffer *buffer)
 				ret_value = ioremap_cached(buffer->priv_phys,
 							   buffer->size);
 			else
-				ret_value = ioremap(buffer->priv_phys,
-						    buffer->size);
+				/* Match the uncached RAM mapping used by map_user. */
+				ret_value = ioremap_wc(buffer->priv_phys,
+						       buffer->size);
 		}
 
 		if (!ret_value) {
