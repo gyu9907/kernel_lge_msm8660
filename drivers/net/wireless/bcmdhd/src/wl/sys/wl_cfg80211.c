@@ -6435,6 +6435,10 @@ int wl_cfg80211_sched_scan_start(struct wiphy *wiphy,
 	int i;
 	int ret = 0;
 
+	if (!request || !request->n_ssids || !request->n_match_sets ||
+		request->n_match_sets > MAX_PFN_LIST_COUNT)
+		return -EINVAL;
+
 	WL_DBG(("Enter \n"));
 	WL_PNO((">>> SCHED SCAN START\n"));
 	WL_PNO(("Enter n_match_sets:%d   n_ssids:%d \n",
@@ -6442,17 +6446,13 @@ int wl_cfg80211_sched_scan_start(struct wiphy *wiphy,
 	WL_PNO(("ssids:%d pno_time:%d pno_repeat:%d pno_freq:%d \n",
 		request->n_ssids, pno_time, pno_repeat, pno_freq_expo_max));
 
-
-	if (!request || !request->n_ssids || !request->n_match_sets) {
-		WL_ERR(("Invalid sched scan req!! n_ssids:%d \n", request->n_ssids));
-		return -EINVAL;
-	}
-
 	memset(&ssids_local, 0, sizeof(ssids_local));
 
 	if (request->n_match_sets > 0) {
 		for (i = 0; i < request->n_match_sets; i++) {
 			ssid = &request->match_sets[i].ssid;
+			if (!ssid->ssid_len || ssid->ssid_len > sizeof(ssids_local[i].SSID))
+				return -EINVAL;
 			memcpy(ssids_local[i].SSID, ssid->ssid, ssid->ssid_len);
 			ssids_local[i].SSID_len = ssid->ssid_len;
 			WL_PNO((">>> PNO filter set for ssid (%s) \n", ssid->ssid));
@@ -6504,13 +6504,14 @@ int wl_cfg80211_sched_scan_stop(struct wiphy *wiphy, struct net_device *dev)
 	if (dhd_dev_pno_reset(dev) < 0)
 		WL_ERR(("PNO reset failed"));
 
-	if (wl->scan_request && wl->sched_scan_running) {
+	/* cfg80211 already owns the stop; do not report it back recursively. */
+	wl->sched_scan_req = NULL;
+	if (wl->sched_scan_running) {
 		WL_PNO((">>> Sched scan running. Aborting it..\n"));
 		wl_notify_escan_complete(wl, dev, true, true);
 	}
 
-	 wl->sched_scan_req = NULL;
-	 wl->sched_scan_running = FALSE;
+	wl->sched_scan_running = FALSE;
 
 	return 0;
 }
@@ -8037,31 +8038,43 @@ wl_notify_sched_scan_results(struct wl_priv *wl, struct net_device *ndev,
 	const wl_event_msg_t *e, void *data)
 {
 	wl_pfn_net_info_t *netinfo, *pnetinfo;
-	struct cfg80211_scan_request request;
+	struct cfg80211_scan_request *request = NULL;
 	struct wiphy *wiphy	= wl_to_wiphy(wl);
 	int err = 0;
 	struct cfg80211_ssid ssid[MAX_PFN_LIST_COUNT];
 	struct ieee80211_channel *channel = NULL;
 	int channel_req = 0;
 	int band = 0;
-	struct wl_pfn_scanresults *pfn_result = (struct wl_pfn_scanresults *)data;
+	struct wl_pfn_scanresults *pfn_result = data;
+	u32 count, datalen = ntoh32(e->datalen);
+	size_t header_len = offsetof(wl_pfn_scanresults_t, netinfo);
 
 	WL_DBG(("Enter\n"));
 
-	if (e->event_type == WLC_E_PFN_NET_LOST) {
+	if (ntoh32(e->event_type) == WLC_E_PFN_NET_LOST) {
 		WL_PNO(("PFN NET LOST event. Do Nothing \n"));
 		return 0;
 	}
-	WL_PNO((">>> PFN NET FOUND event. count:%d \n", pfn_result->count));
-	if (pfn_result->count > 0) {
+	if (!wl->sched_scan_req)
+		return 0;
+	if (!data || datalen < header_len)
+		return -EINVAL;
+	count = dtoh32(pfn_result->count);
+	if (!count || count > MAX_PFN_LIST_COUNT ||
+		count > (datalen - header_len) / sizeof(*pnetinfo))
+		return -EINVAL;
+	WL_PNO((">>> PFN NET FOUND event. count:%u \n", count));
+	if (count > 0) {
 		int i;
 
-		memset(&request, 0x00, sizeof(struct cfg80211_scan_request));
+		request = kzalloc(sizeof(*request) +
+			count * sizeof(request->channels[0]), GFP_KERNEL);
+		if (!request)
+			return -ENOMEM;
 		memset(&ssid, 0x00, sizeof(ssid));
-		request.wiphy = wiphy;
+		request->wiphy = wiphy;
 
-		pnetinfo = (wl_pfn_net_info_t *)(data + sizeof(wl_pfn_scanresults_t)
-				- sizeof(wl_pfn_net_info_t));
+		pnetinfo = (wl_pfn_net_info_t *)((u8 *)data + header_len);
 		channel = (struct ieee80211_channel *)kzalloc(
 			(sizeof(struct ieee80211_channel) * MAX_PFN_LIST_COUNT),
 			GFP_KERNEL);
@@ -8071,10 +8084,10 @@ wl_notify_sched_scan_results(struct wl_priv *wl, struct net_device *ndev,
 			goto out_err;
 		}
 
-		for (i = 0; i < pfn_result->count; i++) {
+		for (i = 0; i < count; i++) {
 			netinfo = &pnetinfo[i];
-			if (!netinfo) {
-				WL_ERR(("Invalid netinfo ptr. index:%d", i));
+			if (netinfo->pfnsubnet.SSID_len > sizeof(ssid[i].ssid)) {
+				WL_ERR(("Invalid PNO SSID length. index:%d", i));
 				err = -EINVAL;
 				goto out_err;
 			}
@@ -8089,7 +8102,7 @@ wl_notify_sched_scan_results(struct wl_priv *wl, struct net_device *ndev,
 			memcpy(ssid[i].ssid, netinfo->pfnsubnet.SSID,
 				netinfo->pfnsubnet.SSID_len);
 			ssid[i].ssid_len = netinfo->pfnsubnet.SSID_len;
-			request.n_ssids++;
+			request->n_ssids++;
 
 			channel_req = netinfo->pfnsubnet.channel;
 			band = (channel_req <= CH_MAX_2G_CHANNEL) ? NL80211_BAND_2GHZ
@@ -8097,13 +8110,13 @@ wl_notify_sched_scan_results(struct wl_priv *wl, struct net_device *ndev,
 			channel[i].center_freq = ieee80211_channel_to_frequency(channel_req, band);
 			channel[i].band = band;
 			channel[i].flags |= IEEE80211_CHAN_NO_HT40;
-			request.channels[i] = &channel[i];
-			request.n_channels++;
+			request->channels[i] = &channel[i];
+			request->n_channels++;
 		}
 
 		/* assign parsed ssid array */
-		if (request.n_ssids)
-			request.ssids = &ssid[0];
+		if (request->n_ssids)
+			request->ssids = &ssid[0];
 
 		if (wl_get_drv_status_all(wl, SCANNING)) {
 			/* Abort any on-going scan */
@@ -8125,7 +8138,7 @@ wl_notify_sched_scan_results(struct wl_priv *wl, struct net_device *ndev,
 		err = wl_do_escan(wl, wiphy, ndev, NULL);
 #else
 		WL_PNO((">>> Doing targeted ESCAN on PNO event\n"));
-		err = wl_do_escan(wl, wiphy, ndev, &request);
+		err = wl_do_escan(wl, wiphy, ndev, request);
 #endif
 		if (err) {
 			wl_clr_drv_status(wl, SCANNING, ndev);
@@ -8137,6 +8150,7 @@ wl_notify_sched_scan_results(struct wl_priv *wl, struct net_device *ndev,
 		WL_ERR(("FALSE PNO Event. (pfn_count == 0) \n"));
 	}
 out_err:
+	kfree(request);
 	if (channel)
 		kfree(channel);
 	return err;
@@ -8691,12 +8705,10 @@ static s32 wl_notify_escan_complete(struct wl_priv *wl,
 #ifdef WL_SCHED_SCAN
 	if (wl->sched_scan_req && !wl->scan_request) {
 		WL_PNO((">>> REPORTING SCHED SCAN RESULTS \n"));
-		if (aborted)
-			cfg80211_sched_scan_stopped(wl->sched_scan_req->wiphy);
-		else
+		/* Aborting the follow-up escan does not stop firmware PNO. */
+		if (!aborted)
 			cfg80211_sched_scan_results(wl->sched_scan_req->wiphy);
 		wl->sched_scan_running = FALSE;
-		wl->sched_scan_req = NULL;
 	}
 #endif /* WL_SCHED_SCAN */
 	if (likely(wl->scan_request)) {
