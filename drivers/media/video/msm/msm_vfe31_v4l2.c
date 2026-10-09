@@ -2256,6 +2256,13 @@ static inline void vfe31_read_irq_status(struct vfe31_irq_status *out)
 	out->camifStatus = msm_camera_io_r(temp);
 	CDBG("camifStatus  = 0x%x\n", out->camifStatus);
 
+	/* Keep individual stats latched until the composite interrupt. Image
+	 * interrupts can arrive earlier and must not consume those stats.
+	 */
+	if (vfe31_ctrl->stats_comp &&
+		!(out->vfeIrqStatus0 & VFE_IRQ_STATUS0_STATS_COMPOSIT_MASK))
+		out->vfeIrqStatus0 &= ~VFE_COM_STATUS;
+
 	/* clear the pending interrupt of the same kind.*/
 	msm_camera_io_w(out->vfeIrqStatus0,
 		vfe31_ctrl->vfebase + VFE_IRQ_CLEAR_0);
