@@ -3762,8 +3762,13 @@ static int msmfb_handle_buf_sync_ioctl(struct msm_fb_data_type *mfd,
 	release_fence = sync_fence_create("mdp-fence",
 			release_sync_pt);
 	sync_fence_install(release_fence, release_fen_fd);
+	/*
+	 * A physical composition retires on the next commit, just like its
+	 * buffers.  Adding another increment delays the HWC1 retire fence
+	 * past replacement and stalls HWC2On1 present-fence backpressure.
+	 */
 	retire_sync_pt = sw_sync_pt_create(mfd->timeline,
-			mfd->timeline_value + threshold + 1);
+			mfd->timeline_value + threshold);
 	retire_fence = sync_fence_create("mdp-retire-fence",
 			retire_sync_pt);
 	sync_fence_install(retire_fence, retire_fen_fd);
