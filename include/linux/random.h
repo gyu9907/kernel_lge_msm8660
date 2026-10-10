@@ -104,6 +104,10 @@ static inline int arch_get_random_int(unsigned int *v)
 }
 #endif
 
+/* Flags for getrandom(2). */
+#define GRND_NONBLOCK 0x0001
+#define GRND_RANDOM   0x0002
+
 #endif /* __KERNEL___ */
 
 #endif /* _LINUX_RANDOM_H */
