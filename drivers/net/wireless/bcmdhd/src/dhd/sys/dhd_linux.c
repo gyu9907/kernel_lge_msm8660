@@ -3975,6 +3975,16 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	}
 #endif /* GET_CUSTOM_MAC_ENABLE */
 
+	/* Preserve the factory address before AP/P2P or userspace changes it.
+	 * Android's Wi-Fi HAL reads ETHTOOL_GPERMADDR, not dev_addr.
+	 * Same contract as ef52 2504400d914, adapted to the firmware MAC path.
+	 */
+	if (dhd->info->iflist[0] && dhd->info->iflist[0]->net &&
+	    is_valid_ether_addr(dhd->mac.octet) &&
+	    !is_valid_ether_addr(dhd->info->iflist[0]->net->perm_addr))
+		memcpy(dhd->info->iflist[0]->net->perm_addr,
+		       dhd->mac.octet, ETHER_ADDR_LEN);
+
 	DHD_TRACE(("Firmware = %s\n", fw_path));
 
 	if ((!op_mode && strstr(fw_path, "_apsta") != NULL) ||
