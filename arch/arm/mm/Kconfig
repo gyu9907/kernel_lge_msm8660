@@ -698,6 +698,15 @@ config SWP_EMULATE
 
 	  If unsure, say Y.
 
+config IDIV_EMULATE
+	bool "Emulate userspace SDIV/UDIV instructions"
+	depends on !CPU_USE_DOMAINS && CPU_V7
+	select HAVE_PROC_CPU if PROC_FS
+	help
+	  Emulate ARM and Thumb integer divide instructions on ARMv7 CPUs
+	  without hardware division. Only userspace instructions are handled.
+	  Statistics are available in /proc/cpu/idiv_emulation.
+
 config CPU_BIG_ENDIAN
 	bool "Build big-endian kernel"
 	depends on ARCH_SUPPORTS_BIG_ENDIAN
