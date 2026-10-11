@@ -464,6 +464,11 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct request_sock *req,
 
 		newtp->rcv_wup = newtp->copied_seq =
 		newtp->rcv_nxt = treq->rcv_isn + 1;
+		/* Do not inherit the listener's lifetime statistics. */
+		newtp->segs_in = 0;
+		newtp->segs_out = 0;
+		newtp->bytes_acked_total = 0;
+		newtp->bytes_received = 0;
 
 		newtp->snd_sml = newtp->snd_una =
 		newtp->snd_nxt = newtp->snd_up =

@@ -2146,6 +2146,10 @@ int tcp_disconnect(struct sock *sk, int flags)
 	tp->snd_ssthresh = TCP_INFINITE_SSTHRESH;
 	tp->snd_cwnd_cnt = 0;
 	tp->bytes_acked = 0;
+	tp->bytes_acked_total = 0;
+	tp->bytes_received = 0;
+	tp->segs_in = 0;
+	tp->segs_out = 0;
 	tp->window_clamp = 0;
 	tcp_set_ca_state(sk, TCP_CA_Open);
 	tcp_clear_retrans(tp);
@@ -2481,7 +2485,7 @@ EXPORT_SYMBOL(compat_tcp_setsockopt);
 #endif
 
 /* Return information about state of tcp endpoint in API format. */
-void tcp_get_info(const struct sock *sk, struct tcp_info *info)
+void tcp_get_info(struct sock *sk, struct tcp_info *info)
 {
 	const struct tcp_sock *tp = tcp_sk(sk);
 	const struct inet_connection_sock *icsk = inet_csk(sk);
@@ -2543,6 +2547,19 @@ void tcp_get_info(const struct sock *sk, struct tcp_info *info)
 	info->tcpi_rcv_space = tp->rcvq_space.space;
 
 	info->tcpi_total_retrans = tp->total_retrans;
+
+	/* No socket pacing in this kernel: report an unlimited rate while
+	 * preserving the TCP_INFO layout used by newer readers.
+	 */
+	info->tcpi_pacing_rate = ~0ULL;
+	info->tcpi_max_pacing_rate = ~0ULL;
+
+	spin_lock_bh(&sk->sk_lock.slock);
+	info->tcpi_bytes_acked = tp->bytes_acked_total;
+	info->tcpi_bytes_received = tp->bytes_received;
+	info->tcpi_segs_out = tp->segs_out;
+	info->tcpi_segs_in = tp->segs_in;
+	spin_unlock_bh(&sk->sk_lock.slock);
 
 	if (sk->sk_socket) {
 		struct file *filep = sk->sk_socket->file;
